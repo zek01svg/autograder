@@ -23,7 +23,11 @@ public class Validator {
             { "Q3", "Q3.java" }
     };
 
-    private static final String RENAMED_PLACEHOLDER = "RenameToYourUsername";
+    // To handle permutations like RenameToYourUsername or RenameToYourStudentID
+    private static final String[] RENAMED_PLACEHOLDERS = {
+            "RenameToYourUsername",
+            "RenameToYourStudentID"
+    };
     private static final int HEADER_LINES_TO_CHECK = 15;
 
     // ------------------------------------------------------------------ public
@@ -40,6 +44,10 @@ public class Validator {
         if (name.toLowerCase().endsWith(".zip")) {
             name = name.substring(0, name.length() - 4);
         }
+
+        // Strip LMS prefix if present (e.g., "2023-2024-")
+        name = name.replaceFirst("^\\d{4}-\\d{4}-", "");
+
         return name;
     }
 
@@ -182,7 +190,7 @@ public class Validator {
 
             if (dirName.equals(studentId)) {
                 studentFolder = f;
-            } else if (dirName.equals(RENAMED_PLACEHOLDER)) {
+            } else if (isPlaceholder(dirName)) {
                 renameFolder = f;
             } else if (dirName.equals("Q1") || dirName.equals("Q2") || dirName.equals("Q3")) {
                 hasQFoldersAtRoot = true;
@@ -195,7 +203,7 @@ public class Validator {
         }
 
         if (renameFolder != null) {
-            addAnomaly(result, "Folder not renamed: found '" + RENAMED_PLACEHOLDER
+            addAnomaly(result, "Folder not renamed: found '" + renameFolder.getName()
                     + "' instead of '" + studentId + "'");
             return renameFolder; // still validate contents inside
         }
@@ -316,5 +324,13 @@ public class Validator {
                         + studentId + File.separator + studentId + File.separator);
             }
         }
+    }
+
+    private boolean isPlaceholder(String dirName) {
+        for (String p : RENAMED_PLACEHOLDERS) {
+            if (dirName.equals(p))
+                return true;
+        }
+        return false;
     }
 }
