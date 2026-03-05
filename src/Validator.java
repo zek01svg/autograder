@@ -16,12 +16,8 @@ import java.util.zip.ZipInputStream;
  */
 public class Validator {
 
-    // Expected question folders and their required Java source files.
-    private static final String[][] REQUIRED_STRUCTURE = {
-            { "Q1", "Q1a.java", "Q1b.java" },
-            { "Q2", "Q2.java" },
-            { "Q3", "Q3.java" }
-    };
+    // Dynamically loaded required question folders and their java files
+    private final java.util.List<String[]> requiredStructure = new java.util.ArrayList<>();
 
     // To handle permutations like RenameToYourUsername or RenameToYourStudentID
     private static final String[] RENAMED_PLACEHOLDERS = {
@@ -31,6 +27,36 @@ public class Validator {
     private static final int HEADER_LINES_TO_CHECK = 15;
 
     // ------------------------------------------------------------------ public
+
+    public Validator(String configPath) throws IOException {
+        loadRequirements(configPath);
+    }
+
+    private void loadRequirements(String configPath) throws IOException {
+        try (BufferedReader br = new BufferedReader(new FileReader(configPath))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty() || line.startsWith("#"))
+                    continue;
+
+                // Parse lines like "Q1: Q1a.java, Q1b.java"
+                String[] parts = line.split(":", 2);
+                if (parts.length < 2)
+                    continue;
+
+                String folderName = parts[0].trim();
+                String[] files = parts[1].split(",");
+
+                String[] reqLine = new String[files.length + 1];
+                reqLine[0] = folderName;
+                for (int i = 0; i < files.length; i++) {
+                    reqLine[i + 1] = files[i].trim();
+                }
+                requiredStructure.add(reqLine);
+            }
+        }
+    }
 
     /**
      * Derive the expected student ID from the zip filename.
@@ -232,7 +258,7 @@ public class Validator {
      * Checks that each required question folder and its Java source files exist.
      */
     private void checkRequiredFiles(File submissionRoot, ValidationResult result) {
-        for (String[] entry : REQUIRED_STRUCTURE) {
+        for (String[] entry : requiredStructure) {
             String folderName = entry[0];
             File folder = new File(submissionRoot, folderName);
 
@@ -261,7 +287,7 @@ public class Validator {
      * and warns if no name/email pattern is detected.
      */
     private void checkHeaders(File submissionRoot, ValidationResult result) {
-        for (String[] entry : REQUIRED_STRUCTURE) {
+        for (String[] entry : requiredStructure) {
             String folderName = entry[0];
             File folder = new File(submissionRoot, folderName);
             if (!folder.exists())

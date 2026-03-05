@@ -83,7 +83,14 @@ public class Main {
 
         System.out.println("Found " + zipFiles.length + " submission(s).\n");
 
-        Validator validator = new Validator();
+        Validator validator;
+        try {
+            validator = new Validator("requirements.txt");
+        } catch (java.io.IOException e) {
+            System.err.println("ERROR: Could not load configuration file 'requirements.txt': " + e.getMessage());
+            System.exit(1);
+            return;
+        }
         ArrayList<ValidationResult> results = new ArrayList<>();
         int passCount = 0;
 
