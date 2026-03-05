@@ -218,7 +218,7 @@ public class Validator {
                 studentFolder = f;
             } else if (isPlaceholder(dirName)) {
                 renameFolder = f;
-            } else if (dirName.equals("Q1") || dirName.equals("Q2") || dirName.equals("Q3")) {
+            } else if (isQuestionFolder(dirName)) {
                 hasQFoldersAtRoot = true;
             }
         }
@@ -236,7 +236,7 @@ public class Validator {
 
         if (hasQFoldersAtRoot) {
             addAnomaly(result, "Missing username folder; incorrect hierarchy "
-                    + "(Q1/Q2/Q3 placed directly at zip root)");
+                    + "(content placed directly at zip root)");
             return extractDir; // treat extractDir as the root
         }
 
@@ -343,13 +343,30 @@ public class Validator {
     private void checkDoubleNesting(File submissionRoot, String studentId, ValidationResult result) {
         File nested = new File(submissionRoot, studentId);
         if (nested.exists() && nested.isDirectory()) {
-            // Check if the nested copy also contains Q folders
-            File nestedQ1 = new File(nested, "Q1");
-            if (nestedQ1.exists() && nestedQ1.isDirectory()) {
+            // Check if the nested copy also contains any expected Q folders
+            boolean containsQFolders = false;
+            File[] nestedFiles = nested.listFiles();
+            if (nestedFiles != null) {
+                for (File f : nestedFiles) {
+                    if (f.isDirectory() && isQuestionFolder(f.getName())) {
+                        containsQFolders = true;
+                        break;
+                    }
+                }
+            }
+            if (containsQFolders) {
                 addWarning(result, "Double-nested folder detected: "
                         + studentId + File.separator + studentId + File.separator);
             }
         }
+    }
+
+    private boolean isQuestionFolder(String dirName) {
+        for (String[] req : requiredStructure) {
+            if (dirName.equals(req[0]))
+                return true;
+        }
+        return false;
     }
 
     private boolean isPlaceholder(String dirName) {
