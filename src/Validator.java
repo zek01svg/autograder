@@ -19,11 +19,6 @@ public class Validator {
     // Dynamically loaded required question folders and their java files
     private final java.util.List<String[]> requiredStructure = new java.util.ArrayList<>();
 
-    // To handle permutations like RenameToYourUsername or RenameToYourStudentID
-    private static final String[] RENAMED_PLACEHOLDERS = {
-            "RenameToYourUsername",
-            "RenameToYourStudentID"
-    };
     private static final int HEADER_LINES_TO_CHECK = 15;
 
     // ------------------------------------------------------------------ public
@@ -205,7 +200,6 @@ public class Validator {
 
         // Collect top-level directory names
         File studentFolder = null;
-        File renameFolder = null;
         boolean hasQFoldersAtRoot = false;
 
         for (File f : topLevel) {
@@ -216,8 +210,6 @@ public class Validator {
 
             if (dirName.equals(studentId)) {
                 studentFolder = f;
-            } else if (isPlaceholder(dirName)) {
-                renameFolder = f;
             } else if (isQuestionFolder(dirName)) {
                 hasQFoldersAtRoot = true;
             }
@@ -226,12 +218,6 @@ public class Validator {
         // Rule A: resolve in priority order
         if (studentFolder != null) {
             return studentFolder; // ideal case
-        }
-
-        if (renameFolder != null) {
-            addAnomaly(result, "Folder not renamed: found '" + renameFolder.getName()
-                    + "' instead of '" + studentId + "'");
-            return renameFolder; // still validate contents inside
         }
 
         if (hasQFoldersAtRoot) {
@@ -364,14 +350,6 @@ public class Validator {
     private boolean isQuestionFolder(String dirName) {
         for (String[] req : requiredStructure) {
             if (dirName.equals(req[0]))
-                return true;
-        }
-        return false;
-    }
-
-    private boolean isPlaceholder(String dirName) {
-        for (String p : RENAMED_PLACEHOLDERS) {
-            if (dirName.equals(p))
                 return true;
         }
         return false;
