@@ -1,7 +1,6 @@
-package autograder;
-
 /**
  * Data class representing the grading result for a single submission.
+ * (Stub — to be fleshed out on feature/compile-execute-grade branch.)
  */
 public class GradeResult {
 
@@ -17,14 +16,25 @@ public class GradeResult {
         this.feedback = feedback;
     }
 
-    public String getStudentId() { return studentId; }
-    public boolean isCompiled() { return compiled; }
-    public int getScore() { return score; }
-    public String getFeedback() { return feedback; }
+    public String getStudentId() {
+        return studentId;
+    }
+
+    public boolean isCompiled() {
+        return compiled;
+    }
+
+    public int getScore() {
+        return score;
+    }
+
+    public String getFeedback() {
+        return feedback;
+    }
 
     @Override
     public String toString() {
-        return "GradeResult{studentId='" + studentId + "', compiled=" + compiled +
-               ", score=" + score + ", feedback='" + feedback + "'}";
+        return "GradeResult{studentId='" + studentId + "', compiled=" + compiled
+                + ", score=" + score + ", feedback='" + feedback + "'}";
     }
 }

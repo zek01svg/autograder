@@ -1,7 +1,6 @@
-package autograder;
-
 /**
  * Compiles and executes student submissions.
+ * (Stub — to be implemented on feature/compile-execute-grade branch.)
  */
 public class Runner {
 
