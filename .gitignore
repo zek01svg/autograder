@@ -28,4 +28,7 @@ out/
 
 # Test data & working directories
 test-data/
+tmp/
 work/
+results/
+
