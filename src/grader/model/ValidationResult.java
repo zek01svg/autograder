@@ -1,4 +1,4 @@
-package src;
+package grader.model;
 
 import java.util.ArrayList;
 
