@@ -1,0 +1,26 @@
+* text=auto
+*.java text diff=java
+*.sh text eol=lf
+*.bat text eol=crlf
+*.md text
+*.properties text
+*.txt text
+*.json text
+*.yml text
+*.yaml text
+*.xml text
+*.csv text
+*.prettierrc text
+.gitignore text
+.gitattributes text
+*.class binary
+*.jar binary
+*.war binary
+*.zip binary
+*.tar.gz binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
