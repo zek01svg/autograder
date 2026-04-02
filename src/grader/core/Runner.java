@@ -120,7 +120,7 @@ public class Runner {
         "--network", "none",
         "--memory=" + config.getProperty("runner.memory", "512m"),
         "--cpus=" + config.getProperty("runner.cpus", "1.0"),
-        "eclipse-temurin:17-jdk-alpine",
+        config.getProperty("runner.image", "eclipse-temurin:17-jdk"),
         "sh", "-c", shellCommand);
 
     pb.redirectErrorStream(true);
