@@ -3,7 +3,7 @@
 
 echo "=== Compiling Project and Tests ==="
 mkdir -p out
-javac -d out -sourcepath src:tests src/grader/Main.java tests/grader/test/GraderTest.java tests/grader/test/IntegrationTest.java
+javac -d out -sourcepath src:tests src/grader/Main.java src/grader/web/WebMain.java tests/grader/test/GraderTest.java tests/grader/test/IntegrationTest.java
 if [ $? -ne 0 ]; then
     echo "Compilation FAILED."
     exit 1

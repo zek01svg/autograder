@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoGrader</title>
+<style>
+  :root {
+    --primary: oklch(65% 0.2 260);
+    --primary-light: oklch(65% 0.2 260 / 0.1);
+    --primary-hover: oklch(55% 0.22 260);
+    --bg: oklch(98% 0.01 260);
+    --card: rgba(255,255,255,0.7);
+    --text: oklch(25% 0.02 260);
+    --dim: oklch(50% 0.02 260);
+    --border: oklch(90% 0.01 260);
+    --success: oklch(65% 0.15 150);
+    --danger: oklch(60% 0.18 25);
+    --warn: oklch(70% 0.15 80);
+    --radius: 1.25rem;
+    --shadow: 0 8px 32px rgba(31,38,135,0.07);
+  }
+  [data-theme="dark"] {
+    --bg: oklch(12% 0.02 260);
+    --card: rgba(30,41,59,0.5);
+    --text: oklch(95% 0.01 260);
+    --dim: oklch(75% 0.01 260);
+    --border: oklch(25% 0.02 260);
+    --primary: oklch(75% 0.15 260);
+    --primary-hover: oklch(80% 0.18 260);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    background-image: radial-gradient(at 0% 0%, var(--primary-light) 0px, transparent 50%),
+                      radial-gradient(at 100% 100%, var(--primary-light) 0px, transparent 50%);
+    color: var(--text);
+    min-height: 100vh;
+    padding: clamp(1rem, 5vw, 4rem);
+    transition: all 0.3s;
+  }
+  .container { max-width: 900px; margin: 0 auto; }
+  header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 2.5rem;
+  }
+  h1 {
+    font-size: clamp(1.5rem, 3vw, 2.5rem);
+    font-weight: 850; letter-spacing: -0.04em;
+    background: linear-gradient(to right, var(--primary), var(--text));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .theme-toggle {
+    background: var(--card); border: 1px solid var(--border);
+    padding: 0.5rem 1rem; border-radius: 0.75rem; cursor: pointer;
+    color: var(--text); font-weight: 600; font-size: 0.85rem;
+  }
+  .theme-toggle:hover { border-color: var(--primary); }
+
+  /* Steps Indicator */
+  .steps {
+    display: flex; gap: 0; margin-bottom: 2.5rem;
+    background: var(--card); border-radius: var(--radius);
+    border: 1px solid var(--border); overflow: hidden;
+    backdrop-filter: blur(12px); box-shadow: var(--shadow);
+  }
+  .step {
+    flex: 1; padding: 1rem; text-align: center;
+    font-size: 0.8rem; font-weight: 600; color: var(--dim);
+    border-right: 1px solid var(--border); transition: all 0.3s;
+    position: relative;
+  }
+  .step:last-child { border-right: none; }
+  .step.active { color: var(--primary); background: var(--primary-light); }
+  .step.done { color: var(--success); }
+  .step-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.5rem; height: 1.5rem; border-radius: 50%;
+    background: var(--border); color: var(--dim); font-size: 0.7rem;
+    margin-right: 0.5rem; transition: all 0.3s;
+  }
+  .step.active .step-num { background: var(--primary); color: white; }
+  .step.done .step-num { background: var(--success); color: white; }
+
+  /* Cards */
+  .card {
+    background: var(--card); backdrop-filter: blur(12px);
+    border-radius: var(--radius); border: 1px solid var(--border);
+    box-shadow: var(--shadow); padding: 2rem; margin-bottom: 1.5rem;
+  }
+  .card h2 {
+    font-size: 1.1rem; font-weight: 750; margin-bottom: 1.25rem;
+    letter-spacing: -0.02em;
+  }
+  .card-subtitle {
+    font-size: 0.8rem; color: var(--dim); margin-top: -0.75rem; margin-bottom: 1.25rem;
+  }
+
+  /* Drop Zones */
+  .drop-zone {
+    border: 2px dashed var(--border); border-radius: 1rem;
+    padding: 2rem; text-align: center; cursor: pointer;
+    transition: all 0.2s; margin-bottom: 1rem;
+    position: relative;
+  }
+  .drop-zone:hover, .drop-zone.dragover {
+    border-color: var(--primary); background: var(--primary-light);
+  }
+  .drop-zone input[type="file"] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer;
+  }
+  .drop-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+  .drop-label { font-weight: 600; font-size: 0.9rem; }
+  .drop-hint { font-size: 0.75rem; color: var(--dim); margin-top: 0.25rem; }
+
+  /* File badges */
+  .file-list { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+  .file-badge {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    background: var(--primary-light); color: var(--primary);
+    padding: 0.35rem 0.75rem; border-radius: 2rem;
+    font-size: 0.75rem; font-weight: 600;
+  }
+  .file-badge .remove {
+    cursor: pointer; opacity: 0.6; font-size: 0.85rem;
+  }
+  .file-badge .remove:hover { opacity: 1; }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 0.75rem 2rem; border-radius: 0.75rem; border: none;
+    font-weight: 700; font-size: 0.9rem; cursor: pointer;
+    transition: all 0.2s; gap: 0.5rem;
+  }
+  .btn-primary {
+    background: var(--primary); color: white;
+  }
+  .btn-primary:hover:not(:disabled) { background: var(--primary-hover); transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-outline {
+    background: transparent; border: 1.5px solid var(--border);
+    color: var(--text);
+  }
+  .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+  .btn-row { display: flex; gap: 0.75rem; margin-top: 1.5rem; flex-wrap: wrap; }
+
+  /* Progress */
+  .progress-bar-outer {
+    width: 100%; height: 0.5rem; background: var(--border);
+    border-radius: 1rem; overflow: hidden; margin-bottom: 1.25rem;
+  }
+  .progress-bar-inner {
+    height: 100%; background: var(--primary); border-radius: 1rem;
+    transition: width 0.4s ease; width: 0%;
+  }
+  .progress-count {
+    font-size: 0.85rem; font-weight: 700; color: var(--primary);
+    margin-bottom: 0.75rem;
+  }
+  .log-area {
+    background: oklch(15% 0.01 260); color: oklch(85% 0.01 150);
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.75rem; line-height: 1.6;
+    padding: 1.25rem; border-radius: 0.75rem;
+    max-height: 300px; overflow-y: auto;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  [data-theme="dark"] .log-area {
+    background: oklch(8% 0.01 260);
+  }
+
+  /* Report embed */
+  .report-frame {
+    width: 100%; border: none; border-radius: 0.75rem;
+    min-height: 600px; background: white;
+  }
+
+  /* Sections */
+  .section { display: none; }
+  .section.active { display: block; }
+
+  /* Animations */
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .pulsing { animation: pulse 1.5s infinite; }
+
+  /* Alerts */
+  .alert {
+    padding: 1rem 1.25rem; border-radius: 0.75rem; font-size: 0.85rem;
+    font-weight: 600; margin-bottom: 1rem;
+  }
+  .alert-error { background: oklch(from var(--danger) l c h / 0.12); color: var(--danger); }
+  .alert-success { background: oklch(from var(--success) l c h / 0.12); color: var(--success); }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    .steps { flex-direction: column; }
+    .step { border-right: none; border-bottom: 1px solid var(--border); }
+    .step:last-child { border-bottom: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>AutoGrader</h1>
+    <button class="theme-toggle" onclick="toggleTheme()">🌓 Theme</button>
+  </header>
+
+  <!-- Step Indicator -->
+  <div class="steps">
+    <div class="step active" id="step-1"><span class="step-num">1</span>Upload</div>
+    <div class="step" id="step-2"><span class="step-num">2</span>Grade</div>
+    <div class="step" id="step-3"><span class="step-num">3</span>Report</div>
+  </div>
+
+  <!-- SECTION 1: Upload -->
+  <div class="section active" id="sec-upload">
+    <div class="card">
+      <h2>📂 Student Submissions</h2>
+      <p class="card-subtitle">Upload .zip files (one per student). Select multiple files at once.</p>
+      <div class="drop-zone" id="dz-submissions">
+        <input type="file" multiple accept=".zip" id="input-submissions">
+        <div class="drop-icon">📦</div>
+        <div class="drop-label">Drop .zip files here or click to browse</div>
+        <div class="drop-hint">Accepts multiple .zip files</div>
+      </div>
+      <div class="file-list" id="fl-submissions"></div>
+    </div>
+
+    <div class="card">
+      <h2>🧪 Tester Files</h2>
+      <p class="card-subtitle">Upload a .zip containing the *Tester.java files (e.g. Q1aTester.java, Q2bTester.java).</p>
+      <div class="drop-zone" id="dz-testers">
+        <input type="file" accept=".zip" id="input-testers">
+        <div class="drop-icon">🔬</div>
+        <div class="drop-label">Drop tester .zip here or click to browse</div>
+        <div class="drop-hint">A .zip containing Q1aTester.java, Q2aTester.java, etc.</div>
+      </div>
+      <div class="file-list" id="fl-testers"></div>
+    </div>
+
+    <div class="card">
+      <h2>📋 Exam Template</h2>
+      <p class="card-subtitle">Upload the resource folder (RenameToYourUsername) as a .zip. This defines the expected folder structure and required files.</p>
+      <div class="drop-zone" id="dz-template">
+        <input type="file" accept=".zip" id="input-template">
+        <div class="drop-icon">📁</div>
+        <div class="drop-label">Drop template .zip here or click to browse</div>
+        <div class="drop-hint">E.g. RenameToYourUsername.zip containing Q1/, Q2/, Q3/ with Java files</div>
+      </div>
+      <div class="file-list" id="fl-template"></div>
+    </div>
+
+    <div id="upload-error"></div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn-upload" onclick="uploadAndGrade()" disabled>
+        Upload &amp; Start Grading →
+      </button>
+    </div>
+  </div>
+
+  <!-- SECTION 2: Grading Progress -->
+  <div class="section" id="sec-grading">
+    <div class="card">
+      <h2>⚙️ Grading In Progress</h2>
+      <div class="progress-count" id="progress-count">Initializing...</div>
+      <div class="progress-bar-outer">
+        <div class="progress-bar-inner" id="progress-bar"></div>
+      </div>
+      <div class="log-area" id="log-area"></div>
+    </div>
+  </div>
+
+  <!-- SECTION 3: Report -->
+  <div class="section" id="sec-report">
+    <div class="card">
+      <h2>📊 Grading Report</h2>
+      <div class="btn-row" style="margin-top:0; margin-bottom:1.25rem;">
+        <button class="btn btn-primary" onclick="window.open('/api/report','_blank')">Open Full Report ↗</button>
+        <button class="btn btn-outline" onclick="downloadCsv()">Download CSV ↓</button>
+        <button class="btn btn-outline" onclick="resetAll()">Grade Again</button>
+      </div>
+      <iframe class="report-frame" id="report-iframe" src=""></iframe>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// State
+// ============================================================
+const state = {
+  submissions: [],
+  testers: [],
+  template: [],
+};
+
+// ============================================================
+// Theme
+// ============================================================
+function toggleTheme() {
+  const t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+  localStorage.setItem('theme', t);
+}
+if (localStorage.getItem('theme') === 'dark') {
+  document.documentElement.setAttribute('data-theme', 'dark');
+}
+
+// ============================================================
+// Drop zones
+// ============================================================
+function setupDropZone(dzId, inputId, listId, stateKey, acceptExt) {
+  const dz = document.getElementById(dzId);
+  const input = document.getElementById(inputId);
+
+  ['dragenter','dragover'].forEach(e => {
+    dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.add('dragover'); });
+  });
+  ['dragleave','drop'].forEach(e => {
+    dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.remove('dragover'); });
+  });
+  dz.addEventListener('drop', ev => {
+    const files = [...ev.dataTransfer.files].filter(f =>
+      acceptExt.some(ext => f.name.toLowerCase().endsWith(ext))
+    );
+    addFiles(stateKey, files, listId);
+  });
+  input.addEventListener('change', () => {
+    addFiles(stateKey, [...input.files], listId);
+    input.value = '';
+  });
+}
+
+function addFiles(key, files, listId) {
+  for (const f of files) {
+    if (!state[key].find(x => x.name === f.name && x.size === f.size)) {
+      state[key].push(f);
+    }
+  }
+  renderFiles(key, listId);
+  updateUploadBtn();
+}
+
+function removeFile(key, idx, listId) {
+  state[key].splice(idx, 1);
+  renderFiles(key, listId);
+  updateUploadBtn();
+}
+
+function renderFiles(key, listId) {
+  const el = document.getElementById(listId);
+  el.innerHTML = state[key].map((f, i) =>
+    `<span class="file-badge">${f.name} <span class="remove" onclick="removeFile('${key}',${i},'${listId}')">✕</span></span>`
+  ).join('');
+}
+
+function updateUploadBtn() {
+  const btn = document.getElementById('btn-upload');
+  btn.disabled = !(state.submissions.length > 0 && state.testers.length > 0 && state.template.length > 0);
+}
+
+setupDropZone('dz-submissions', 'input-submissions', 'fl-submissions', 'submissions', ['.zip']);
+setupDropZone('dz-testers', 'input-testers', 'fl-testers', 'testers', ['.zip']);
+setupDropZone('dz-template', 'input-template', 'fl-template', 'template', ['.zip']);
+
+// ============================================================
+// Upload & Grade
+// ============================================================
+async function uploadAndGrade() {
+  const btn = document.getElementById('btn-upload');
+  btn.disabled = true;
+  btn.innerHTML = 'Uploading...';
+  document.getElementById('upload-error').innerHTML = '';
+
+  const form = new FormData();
+  state.submissions.forEach(f => form.append('submissions', f, f.name));
+  state.testers.forEach(f => form.append('testers', f, f.name));
+  state.template.forEach(f => form.append('template', f, f.name));
+
+  try {
+    const res = await fetch('/api/upload', { method: 'POST', body: form });
+    const data = await res.json();
+    if (!res.ok) {
+      showError(data.error || 'Upload failed');
+      btn.disabled = false;
+      btn.innerHTML = 'Upload &amp; Start Grading →';
+      return;
+    }
+
+    // Start grading
+    const gradeRes = await fetch('/api/grade', { method: 'POST' });
+    const gradeData = await gradeRes.json();
+    if (!gradeRes.ok) {
+      showError(gradeData.error || 'Failed to start grading');
+      btn.disabled = false;
+      btn.innerHTML = 'Upload &amp; Start Grading →';
+      return;
+    }
+
+    // Switch to grading view
+    showSection('sec-grading');
+    setStep(2);
+    connectSSE();
+  } catch (err) {
+    showError('Network error: ' + err.message);
+    btn.disabled = false;
+    btn.innerHTML = 'Upload &amp; Start Grading →';
+  }
+}
+
+function showError(msg) {
+  document.getElementById('upload-error').innerHTML =
+    `<div class="alert alert-error">${msg}</div>`;
+}
+
+// ============================================================
+// SSE Progress
+// ============================================================
+let evtSource = null;
+
+function connectSSE() {
+  const logArea = document.getElementById('log-area');
+  const progressCount = document.getElementById('progress-count');
+  const progressBar = document.getElementById('progress-bar');
+  logArea.textContent = '';
+
+  evtSource = new EventSource('/api/progress');
+
+  evtSource.addEventListener('progress', e => {
+    logArea.textContent += e.data + '\n';
+    logArea.scrollTop = logArea.scrollHeight;
+  });
+
+  evtSource.addEventListener('phase', e => {
+    const phase = e.data;
+    if (phase === 'validating') progressCount.textContent = 'Validating submissions...';
+    else if (phase === 'grading') progressCount.textContent = 'Compiling & grading...';
+    else if (phase === 'reporting') progressCount.textContent = 'Generating report...';
+    else if (phase === 'complete') {
+      progressCount.textContent = 'Complete!';
+      progressBar.style.width = '100%';
+    }
+  });
+
+  evtSource.addEventListener('count', e => {
+    const parts = e.data.split('/');
+    if (parts.length === 2) {
+      const done = parseInt(parts[0]);
+      const total = parseInt(parts[1]);
+      const pct = Math.round((done / total) * 100);
+      progressCount.textContent = `Grading: ${done}/${total} (${pct}%)`;
+      progressBar.style.width = pct + '%';
+    }
+  });
+
+  evtSource.addEventListener('complete', e => {
+    evtSource.close();
+    setTimeout(() => {
+      showSection('sec-report');
+      setStep(3);
+      document.getElementById('report-iframe').src = '/api/report';
+    }, 800);
+  });
+
+  evtSource.addEventListener('error', e => {
+    if (typeof e.data === 'string' && e.data) {
+      logArea.textContent += '\n❌ ERROR: ' + e.data + '\n';
+      progressCount.textContent = 'Error occurred';
+      progressCount.style.color = 'var(--danger)';
+    }
+  });
+
+  evtSource.onerror = () => {
+    // SSE connection lost — check status
+    setTimeout(async () => {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        if (!data.grading && data.phase === 'complete') {
+          showSection('sec-report');
+          setStep(3);
+          document.getElementById('report-iframe').src = '/api/report';
+        }
+      } catch (err) { /* ignore */ }
+    }, 1000);
+  };
+}
+
+// ============================================================
+// Navigation
+// ============================================================
+function showSection(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function setStep(n) {
+  document.querySelectorAll('.step').forEach((s, i) => {
+    s.classList.remove('active', 'done');
+    if (i + 1 < n) s.classList.add('done');
+    if (i + 1 === n) s.classList.add('active');
+  });
+}
+
+function downloadCsv() {
+  window.open('/api/report/csv', '_blank');
+}
+
+function resetAll() {
+  state.submissions = [];
+  state.testers = [];
+  state.template = [];
+  renderFiles('submissions', 'fl-submissions');
+  renderFiles('testers', 'fl-testers');
+  renderFiles('template', 'fl-template');
+  updateUploadBtn();
+  document.getElementById('btn-upload').innerHTML = 'Upload &amp; Start Grading →';
+  document.getElementById('log-area').textContent = '';
+  document.getElementById('progress-bar').style.width = '0%';
+  document.getElementById('progress-count').textContent = 'Initializing...';
+  document.getElementById('progress-count').style.color = '';
+  document.getElementById('upload-error').innerHTML = '';
+  showSection('sec-upload');
+  setStep(1);
+}
+</script>
+</body>
+</html>

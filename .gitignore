@@ -28,6 +28,14 @@ out/
 
 # Test data & working directories
 test-data/
+
+# Web server runtime directories
+web-uploads/
+web-work/
+web-results/
+
+# macOS
+.DS_Store
 tmp/
 work/
 results/
