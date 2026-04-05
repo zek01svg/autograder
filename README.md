@@ -1,5 +1,47 @@
 # OOP IS442 G3T3 — AutoGrader
 
+## 🚀 How to Run (Quick Start)
+
+### Prerequisites
+- **JDK 17+**
+- **Docker Desktop** (Engine must be running)
+
+### macOS/Linux
+1. **Build the project:**
+  ```sh
+  ./scripts/compile.sh
+  ```
+
+  
+2. **Run the web frontend (with backend):**
+  ```sh
+  java -cp out grader.web.WebMain
+  ```
+  Then open [http://localhost:8080](http://localhost:8080) in your browser.
+
+3. **(Optional) Run CLI grading:**
+  ```sh
+  java -cp out grader.Main --submissions <path-to-zip-folder>
+  ```
+
+### Windows
+1. **Build the project:**
+  ```bat
+  scripts\compile.bat
+  ```
+2. **Run the web frontend (with backend):**
+  ```bat
+  java -cp out grader.web.WebMain
+  ```
+  Then open [http://localhost:8080](http://localhost:8080) in your browser.
+
+3. **(Optional) Run CLI grading:**
+  ```bat
+  java -cp out grader.Main --submissions <path-to-zip-folder>
+  ```
+
+A more detailed guide is provided below.
+
 A robust Java console application that auto-grades student ZIP submissions using Docker isolation and externalized configuration.
 
 ## System Architecture
@@ -247,26 +289,4 @@ The system is fully configurable via `config.properties`.
 - **JDK 17+**
 - **Docker Desktop** (Engine must be running)
 
-### Quick Start
 
-1. **Build and Test**
-
-   ```bash
-   # Windows
-   scripts\compile.bat
-   scripts\test.bat
-   ```
-
-2. **Run Standard Grading**
-
-   ```bash
-   scripts\run.bat --submissions student-submission
-   ```
-
-3. **Run Validation Only**
-   ```bash
-   scripts\run.bat --validate-only --submissions student-submission
-   ```
-
-> [!TIP]
-> After execution, open **`results/report.html`** in your browser to view the generated dashboard, which includes a Bell Curve Distribution and student-specific feedback.
