@@ -1,48 +1,145 @@
 # OOP IS442 G3T3 — AutoGrader
 
-## 🚀 How to Run (Quick Start)
+A Java-based auto-grader for IS442 student submissions. Runs each test in an isolated Docker container and produces per-question scores and a gradebook-ready CSV. Instructors can interact via the **Next.js dashboard** (recommended) or the **CLI** directly.
 
-### Prerequisites
+---
+
+## Prerequisites
+
 - **JDK 17+**
-- **Docker Desktop** (Engine must be running)
+- **Docker Desktop** (engine must be running)
+- **Node.js 18+** and **pnpm** — for the dashboard only
 
-### macOS/Linux
-1. **Build the project:**
-  ```sh
-  ./scripts/compile.sh
-  ```
+---
 
-  
-2. **Run the web frontend (with backend):**
-  ```sh
-  java -cp out grader.web.WebMain
-  ```
-  Then open [http://localhost:8080](http://localhost:8080) in your browser.
+## Option 1: Dashboard (Recommended)
 
-3. **(Optional) Run CLI grading:**
-  ```sh
-  java -cp out grader.Main --submissions <path-to-zip-folder>
-  ```
+A web UI with two modes:
 
-### Windows
-1. **Build the project:**
-  ```bat
-  scripts\compile.bat
-  ```
-2. **Run the web frontend (with backend):**
-  ```bat
-  java -cp out grader.web.WebMain
-  ```
-  Then open [http://localhost:8080](http://localhost:8080) in your browser.
+- **Direct** — upload student submission zips, tester files folder, and exam template folder. Grade immediately.
+- **Generate** — upload the question paper (PDF or text) and the template folder; the AI generates JUnit test files for you to review before grading.
 
-3. **(Optional) Run CLI grading:**
-  ```bat
-  java -cp out grader.Main --submissions <path-to-zip-folder>
-  ```
+### Setup
 
-A more detailed guide is provided below.
+```sh
+# 1. Compile the Java grader
+./scripts/compile.sh        # macOS/Linux
+scripts\compile.bat         # Windows
 
-A robust Java console application that auto-grades student ZIP submissions using Docker isolation and externalized configuration.
+# 2. Install dashboard dependencies
+cd dashboard
+pnpm install
+
+# 3. Start the dashboard
+pnpm dev
+```
+
+Then open [http://localhost:3000](http://localhost:3000).
+
+> Docker must be running before you click **Start Execution** in the dashboard.
+
+### Dashboard workflow (Direct mode)
+
+1. Select student `.zip` files (one per student)
+2. Select the `Tester-Files` folder containing `*Tester.java` files
+3. Select the `RenameToYourUsername` template folder
+4. Click **Upload & Prepare**, then **Start Execution**
+5. View per-question scores, validation status, and download the results CSV
+
+### Dashboard workflow (Generate mode)
+
+1. Paste or upload the question paper (PDF / `.txt` / `.md`)
+2. Select the `RenameToYourUsername` template folder
+3. Click **Start Autograder** — AI generates JUnit test files
+4. Review and approve the generated tests
+5. Click **Start Execution**
+6. View results and download CSV
+
+---
+
+## Option 2: CLI
+
+For scripted or headless environments.
+
+### Build
+
+```sh
+./scripts/compile.sh        # macOS/Linux
+scripts\compile.bat         # Windows
+```
+
+### Run
+
+```sh
+# macOS/Linux
+./scripts/run.sh --submissions <path-to-zip-folder>
+
+# Windows
+scripts\run.bat --submissions <path-to-zip-folder>
+```
+
+### CLI flags
+
+| Flag | Description | Default |
+|---|---|---|
+| `--submissions <path>` | **Required.** Directory containing student `.zip` files | — |
+| `--testers <path>` | Directory containing `*Tester.java` files | `Tester-Files` |
+| `--template <path>` | Template folder for structural validation | `RenameToYourUsername` |
+| `--scoresheet <path>` | IS442 ScoreSheet CSV template | `scoresheet.csv` |
+| `--output <path>` | Output CSV path | `results/results.csv` |
+| `--workdir <path>` | Temp directory for extraction and compilation | `work` |
+| `--validate-only` | Validate structure only, skip Docker execution | `false` |
+
+### Other scripts
+
+| Script | Description |
+|---|---|
+| `scripts/compile` | Compile all Java source files into `out/` |
+| `scripts/test` | Run unit tests and E2E integration tests |
+
+---
+
+## Project Structure
+
+```
+src/grader/
+  Main.java                  CLI entry point
+  core/
+    GradingPipeline.java     Primary orchestrator
+    Runner.java              Docker execution engine
+    Validator.java           Submission quality gate
+    Grader.java              Score parsing logic
+  model/
+    GradeResult.java         Score data model
+    ValidationResult.java    Submission health model
+  report/
+    Reporter.java            HTML & CSV report generation
+    ProgressBar.java         CLI progress feedback
+  util/
+    FileUtil.java            Filesystem utilities
+    CsvUtil.java             CSV parsing utilities
+dashboard/                   Next.js web UI
+tests/                       Unit & integration tests
+results/                     Generated outputs (HTML report, CSV)
+RenameToYourUsername/        Exam template folder
+Tester-Files/                Tester Java files
+config.properties            System configuration
+```
+
+---
+
+## Configuration (`config.properties`)
+
+| Key | Description | Default |
+|---|---|---|
+| `runner.threads` | Max concurrent Docker containers | `5` |
+| `runner.memory` | Memory limit per container | `512m` |
+| `runner.cpus` | CPU limit per container | `1.0` |
+| `runner.timeout_seconds` | Execution timeout per student (seconds) | `15` |
+| `dir.testers` | Tester files directory | `Tester-Files` |
+| `dir.work` | Working directory for extractions | `work` |
+
+---
 
 ## System Architecture
 
@@ -84,58 +181,7 @@ classDiagram
     Reporter ..> CsvUtil : uses
 ```
 
-### Core Classes
-
-#### 1. `grader.Main`
-
-- **Responsibility**: System entry point and CLI coordinator.
-- **Functionality**:
-  - Parses command-line arguments and switches between modes (`full` vs `--validate-only`).
-  - Loads external `config.properties` into the system.
-  - Orchestrates the initial handoff to the `grader.core.GradingPipeline`.
-
-#### 2. `grader.core.GradingPipeline`
-
-- **Responsibility**: The primary "brain" of the grading lifecycle.
-- **Functionality**:
-  - Manages the parallel execution flow using the `Runner`'s task submission API.
-  - Aggregates multi-question scores into a single per-student result.
-  - Handles batch command building and score collection.
-
-#### 3. `grader.core.Runner`
-
-- **Responsibility**: Secure execution environment manager (Docker).
-- **Functionality**:
-  - Manages a fixed thread pool for concurrent container execution.
-  - Encapsulates Docker interaction, applying memory/CPU limits and strict timeouts.
-  - Ensures automatic container cleanup after each run.
-
-#### 4. `grader.core.Validator`
-
-- **Responsibility**: Quality gate for student submissions.
-- **Functionality**:
-  - **Dynamic Requirement Detection**: Scans the project template folder to determine required files.
-  - Detects common submission errors like double-nested folders or missing headers.
-  - Implements heuristics to identify student identity within source files.
-
-#### 5. `grader.util.FileUtil` & `grader.util.CsvUtil`
-
-- **Responsibility**: Filesystem and data utility operations.
-- **Functionality**:
-  - `FileUtil`: Integrated native Java `ZipInputStream` for robust extraction; recursive root discovery.
-  - `CsvUtil`: Specialized row mapping for the IS442 ScoreSheet CSV format.
-
-#### 6. `grader.core.Grader` & `grader.report.Reporter`
-
-- **Responsibility**: Result interpretation and output.
-- **Functionality**:
-  - `Grader`: Analyzes raw STDOUT to extract numeric scores using robust parsing.
-  - `Reporter`: Generates a modern HTML dashboard and graduate-ready CSV results.
-  - `ProgressBar`: Provides real-time CLI feedback during the grading lifecycle.
-
 ### Execution Flow
-
-The system uses **one container per question** execution to isolate timeouts and prevent a single hanging test from blocking other questions.
 
 ```mermaid
 flowchart TD
@@ -145,8 +191,9 @@ flowchart TD
         Testers["Java Tester Files"]
     end
 
-    subgraph Entry ["CLI Entry"]
-        Main["Main Class"]
+    subgraph UI ["Interface"]
+        Dashboard["Next.js Dashboard"]
+        CLI["CLI (grader.Main)"]
     end
 
     subgraph Core ["Orchestration Layer"]
@@ -162,12 +209,12 @@ flowchart TD
     subgraph Output ["Processing & Results"]
         Grader["Grader (Stdout Parsing)"]
         Reporter["Reporter"]
-        Dashboard["HTML Dashboard / CSV"]
+        Results["results/report.html + results.csv"]
     end
 
-    %% Flow
-    Config -- "1. Load" --> Main
-    Main -- "2. Initialize" --> Pipeline
+    Config -- "1. Load" --> Pipeline
+    Dashboard -- "2. Spawn" --> CLI
+    CLI -- "2. Initialize" --> Pipeline
     ZIPs -- "3. Scan" --> Validator
     Validator -- "3. Validated" --> Pipeline
     Pipeline -- "4. Submit Task" --> Runner
@@ -176,117 +223,11 @@ flowchart TD
     Docker -- "6. STDOUT" --> Grader
     Grader -- "6. Parse Score" --> Pipeline
     Pipeline -- "7. Aggregate" --> Reporter
-    Reporter -- "7. Generate" --> Dashboard
+    Reporter -- "7. Generate" --> Results
 
-    %% Styling
-    style Main fill:#f9f,stroke:#333,stroke-width:2px
-    style Pipeline fill:#b2e2f2,stroke:#333,stroke-width:2px
-    style Docker fill:#ffff00,stroke:#333,stroke-width:1px
-    style Dashboard fill:#dae8fc,stroke:#6c8ebf,stroke-width:1px
+    style Dashboard fill:#6366f1,color:#fff,stroke:#4338ca
+    style CLI fill:#f9f,stroke:#333
+    style Pipeline fill:#b2e2f2,stroke:#333
+    style Docker fill:#ffff00,stroke:#333
+    style Results fill:#dae8fc,stroke:#6c8ebf
 ```
-
-#### Step-by-Step Breakdown
-
-1.  **Configuration Loading**: `Main` loads `config.properties` and parses CLI arguments (paths, modes).
-2.  **Pipeline Initialization**: The `GradingPipeline` is instantiated with paths and system settings.
-3.  **Submission Validation**: Zip files are scanned for structural health and security (Zip-Slip protection).
-4.  **Parallel Students Processing**: Valid submissions are submitted to the `Runner`'s thread pool.
-    - Up to **5 students** are graded concurrently.
-    - Each student task runs: `unzip` -> `setup testers` -> `docker run`.
-5.  **Per-Question Execution**:
-    - A Docker container is spun up per question to isolate timeouts and infinite loops.
-    - Each question compiles and runs inside its own folder to avoid class collisions.
-6.  **Score Extraction**: Each run’s output is parsed directly (no BEGIN/END tags needed).
-7.  **Final Reporting**: Scores are aggregated into `GradeResult` objects and presented in a html report (`results/report.html`) alongside the gradebook-ready `results/results.csv`.
-
-## Internal Optimizations
-
-### 1. Isolated Per-Question Execution
-
-To prioritize robustness and fairness, the system runs one Docker container per question. This isolates infinite loops/timeouts to a single question so other questions still receive scores.
-
-### 2. Per-Question Compilation
-
-Each question is compiled in its own folder (`cd <folder> && javac *.java`) to prevent class name collisions across questions.
-
-### 3. Direct Output Parsing
-
-Each tester run produces its own output, which is parsed directly by the `Grader` without BEGIN/END markers.
-
-## Project Structure
-
-```
-src/
-  grader/
-    Main.java              CLI Entry Point
-    core/
-      GradingPipeline.java Primary Orchestrator
-      Runner.java          Docker Execution Engine
-      Validator.java       Submission Quality Gate
-      Grader.java          Score Parsing Logic
-    model/
-      GradeResult.java     Score Data Model
-      ValidationResult.java Submission Health Model
-    report/
-      Reporter.java        HTML & CSV Reporting
-      ProgressBar.java     CLI Progress Feedback
-    util/
-      FileUtil.java        Filesystem Utils
-      CsvUtil.java         CSV Parsing Utils
-tests/
-  grader/
-    test/
-      IntegrationTest.java E2E Pipeline Test
-      GraderTest.java      Score Parsing Tests
-      TestUtils.java       Assert Helpers
-results/                   Generated Outputs
-config.properties          System Configuration
-RenameToYourUsername/      Project Template
-scripts/                   Build & Run Automation
-```
-
-## Configuration (`config.properties`)
-
-The system is fully configurable via `config.properties`.
-
-| Key                      | Description                                  | Default                       |
-| ------------------------ | -------------------------------------------- | ----------------------------- |
-| `questions`              | Semicolon-separated folder:question mappings | `Q1:Q1a,Q1b;Q2:Q2a,Q2b;Q3:Q3` |
-| `path.template`          | Folder used for dynamic validation           | `RenameToYourUsername`        |
-| `runner.threads`         | Max concurrent Docker containers (limit 5)   | `5`                           |
-| `runner.memory`          | Memory limit per container                   | `512m`                        |
-| `runner.cpus`            | CPU limit per container                      | `1.0`                         |
-| `runner.timeout_seconds` | Execution timeout per student                | `15`                          |
-| `dir.testers`            | Folder containing Tester-Files               | `Tester-Files`                |
-| `dir.work`               | Working directory for extractions            | `work`                        |
-
-## 🚀 CLI Usage
-
-### Commands
-
-| Command               | Description                                                      |
-| :-------------------- | :--------------------------------------------------------------- |
-| `scripts\compile.bat` | Compiles all Java source files into the `out/` directory.        |
-| `scripts\run.bat`     | Executes the autograder with the specified arguments.            |
-| `scripts\test.bat`    | Executes the complete test suite (Unit Tests + E2E Integration). |
-
-### Options & Flags
-
-| Flag                   | Description                                                               | Default                |
-| :--------------------- | :------------------------------------------------------------------------ | :--------------------- |
-| `--submissions <path>` | **Required.** Path to the directory containing student ZIP files.         | N/A                    |
-| `--validate-only`      | Performs structural validation only (scans ZIPs, skips Docker execution). | `false`                |
-| `--testers <path>`     | Path to the directory containing `.java` tester files.                    | `Tester-Files`         |
-| `--scoresheet <path>`  | Path to the IS442 ScoreSheet CSV template.                                | `scoresheet.csv`       |
-| `--output <path>`      | Filename for merged CSV (written under `results/`).                       | `results/results.csv`  |
-| `--workdir <path>`     | Directory used for temporary ZIP extraction and compilation.              | `work`                 |
-| `--template <path>`    | Template folder used for dynamic file requirement detection.              | `RenameToYourUsername` |
-
-## 🛠️ Getting Started
-
-### Prerequisites
-
-- **JDK 17+**
-- **Docker Desktop** (Engine must be running)
-
-
