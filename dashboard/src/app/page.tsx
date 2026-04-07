@@ -16,6 +16,7 @@ import {
   Cpu,
   Sun,
   Moon,
+  Download,
 } from "lucide-react";
 import { ScoreDistribution } from "@/components/ScoreDistribution";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -35,6 +36,7 @@ export default function DashboardPage() {
     html: string;
   } | null>(null);
   const [uploadMode, setUploadMode] = useState<"ai" | "direct">("ai");
+  const [preloadedTesters, setPreloadedTesters] = useState<File[]>([]);
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -54,21 +56,51 @@ export default function DashboardPage() {
   const generateMutation = useMutation({
     mutationFn: async (data: { questionPaper: string; templateStructure: string }) => {
       const sections = splitQuestionPaper(data.questionPaper);
-      const allFiles = data.templateStructure.split("\n").filter(Boolean);
       const allFilesMap = new Map<string, TestFile>();
 
-      for (let i = 0; i < sections.length; i++) {
-        const sectionText = sections[i];
-        setProgress({ current: i + 1, total: sections.length });
+      // Parse template blocks to extract file paths and their content
+      const blocks = data.templateStructure.split(/(?=--- FILE: )/);
+      const filePaths: string[] = [];
+      const pathToBlock = new Map<string, string>();
 
-        const prunedContext = getRelevantFiles(sectionText, allFiles);
+      for (const block of blocks) {
+        const match = block.match(/^--- FILE: (.+?)(?:\s+\(.*?\))? ---/);
+        if (match) {
+          filePaths.push(match[1]);
+          pathToBlock.set(match[1], block.trim());
+        }
+      }
+
+      console.log(`[AutoGrader] Question paper split into ${sections.length} section(s). Template has ${filePaths.length} file(s).`);
+
+      // If only 1 section (PDF couldn't be split), send everything in one shot
+      const useSingleShot = sections.length <= 1;
+      const iterSections = useSingleShot ? [data.questionPaper] : sections;
+
+      for (let i = 0; i < iterSections.length; i++) {
+        const sectionText = iterSections[i];
+        setProgress({ current: i + 1, total: iterSections.length });
+
+        let context: string;
+        if (useSingleShot) {
+          // Send full template context so AI can generate all testers at once
+          context = data.templateStructure;
+        } else {
+          // Get relevant file paths, then look up their full code blocks
+          const relevantPathsStr = getRelevantFiles(sectionText, filePaths);
+          const relevantPaths = relevantPathsStr.split("\n").filter(Boolean);
+          context =
+            relevantPaths.length > 0
+              ? relevantPaths.map((p) => pathToBlock.get(p) || "").filter(Boolean).join("\n\n")
+              : data.templateStructure;
+        }
 
         const res = await fetch("/api/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             questionPaper: sectionText,
-            templateStructure: prunedContext || data.templateStructure,
+            templateStructure: context,
           }),
         });
 
@@ -140,7 +172,13 @@ export default function DashboardPage() {
       return res.json();
     },
     onSuccess: () => {
-      setCurrentStep("run");
+      // Convert generated test files to File objects and redirect to direct upload
+      const testerFileObjects = generatedFiles.map(
+        (f) => new File([f.code], f.filename, { type: "text/x-java" })
+      );
+      setPreloadedTesters(testerFileObjects);
+      setUploadMode("direct");
+      setCurrentStep("upload");
     },
   });
 
@@ -176,33 +214,36 @@ export default function DashboardPage() {
       <div className="absolute top-0 left-0 w-full h-[500px] bg-linear-to-b from-indigo-500/5 to-transparent pointer-events-none" />
       <div className="absolute top-[20%] -right-[10%] w-[40%] h-[40%] bg-indigo-600/5 blur-[120px] rounded-none pointer-events-none" />
 
-      <header className="flex border-b border-border bg-background/50 backdrop-blur-md sticky top-0 z-50">
+      <header className="flex border-b border-border bg-background/50 backdrop-blur-md sticky top-0 z-[60]">
         <div className="max-w-7xl mx-auto w-full px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-indigo-600 flex items-center justify-center rounded-none shadow-lg shadow-indigo-500/20">
-              <Cpu className="text-primary-foreground w-6 h-6" />
-            </div>
-            <div>
+            <button
+              onClick={() => { setCurrentStep("upload"); setGeneratedFiles([]); setExecutionOutput(""); setResults(null); setProgress(null); setPreloadedTesters([]); }}
+              className="flex items-center gap-4 cursor-pointer hover:opacity-80 transition-opacity"
+            >
+              <div className="w-10 h-10 bg-indigo-600 flex items-center justify-center rounded-none shadow-lg shadow-indigo-500/20">
+                <Cpu className="text-primary-foreground w-6 h-6" />
+              </div>
               <h1 className="text-2xl font-black text-foreground tracking-widest font-heading uppercase">
                 Autograder
               </h1>
-              <div className="flex gap-4 mt-1">
-                {(uploadMode === "direct" ? ["upload", "run"] : ["upload", "review", "run"]).map(
-                  (step, i) => (
-                    <div
-                      key={step}
-                      className={`text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-colors ${currentStep === step ? "text-indigo-600 dark:text-indigo-400" : "text-muted-foreground"}`}
+            </button>
+            <div className="flex gap-4 mt-1">
+              {(uploadMode === "direct" ? ["upload", "run"] : ["upload", "review", "run"]).map(
+                (step, i) => (
+                  <div
+                    key={step}
+                    className={`text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-colors ${currentStep === step ? "text-indigo-600 dark:text-indigo-400" : "text-muted-foreground"}`}
+                  >
+                    <span
+                      className={`w-3.5 h-3.5 flex items-center justify-center border ${currentStep === step ? "border-indigo-600 dark:border-indigo-400 bg-indigo-600/10 dark:bg-indigo-400/10" : "border-border"} rounded-none`}
                     >
-                      <span
-                        className={`w-3.5 h-3.5 flex items-center justify-center border ${currentStep === step ? "border-indigo-600 dark:border-indigo-400 bg-indigo-600/10 dark:bg-indigo-400/10" : "border-border"} rounded-none`}
-                      >
-                        {i + 1}
-                      </span>
-                      {step}
-                    </div>
-                  ),
-                )}
-              </div>
+                      {i + 1}
+                    </span>
+                    {step}
+                  </div>
+                ),
+              )}
             </div>
           </div>
 
@@ -251,10 +292,11 @@ export default function DashboardPage() {
                   Assignment
                 </h2>
                 <p className="text-muted-foreground mt-2 font-medium">
-                  Upload assignment to generate tests.
+                  Upload files to begin grading.
                 </p>
               </div>
               <UploadZone
+                preloadedTesterFiles={preloadedTesters}
                 onFilesSelected={(data) => {
                   if (data.mode === "generate" && data.questionPaper) {
                     setUploadMode("ai");
@@ -312,12 +354,37 @@ export default function DashboardPage() {
                   </div>
                 )}
               </div>
+              <div className="bg-amber-500/10 border border-amber-500/30 p-4 rounded-none">
+                <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+                  <span className="font-black uppercase tracking-wider">⚠ Disclaimer:</span>{" "}
+                  AI-generated test files may not always be accurate. Please review and amend the test cases before using them for final grading. Test inputs, expected outputs, and edge cases should be verified against the exam requirements.
+                </p>
+              </div>
               <div className="flex flex-col gap-10">
                 <TestReviewer
                   files={generatedFiles}
                   onSave={() => saveMutation.mutate(generatedFiles)}
                   isLoading={saveMutation.isPending}
                 />
+                <button
+                  onClick={() => {
+                    generatedFiles.forEach((file) => {
+                      const blob = new Blob([file.code], { type: "text/x-java" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = file.filename;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    });
+                  }}
+                  className="flex items-center justify-center gap-3 py-3 px-6 border-2 border-border bg-card hover:bg-accent hover:border-indigo-500 transition-all rounded-none w-fit mx-auto group"
+                >
+                  <Download className="w-4 h-4 text-muted-foreground group-hover:text-indigo-600 dark:group-hover:text-indigo-400" />
+                  <span className="text-xs font-black text-muted-foreground group-hover:text-foreground uppercase tracking-widest">
+                    Download All Test Files
+                  </span>
+                </button>
               </div>
             </div>
           )}

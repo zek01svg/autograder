@@ -1,20 +1,25 @@
-import { NextResponse } from "next/server";
 import { spawn } from "child_process";
 import path from "path";
 
 export async function POST() {
   const encoder = new TextEncoder();
-  const runBatPath = path.resolve(process.cwd(), "..", "scripts", "run.bat");
+  const isWindows = process.platform === "win32";
+  const scriptName = isWindows ? "run.bat" : "run.sh";
+  const scriptPath = path.resolve(process.cwd(), "..", "scripts", scriptName);
   const projectRoot = path.resolve(process.cwd(), "..");
 
-  console.log(`Starting Java Grader from: ${runBatPath}`);
+  console.log(`Starting Java Grader from: ${scriptPath} (platform: ${process.platform})`);
 
   const stream = new ReadableStream({
     start(controller) {
-      const child = spawn("cmd.exe", ["/c", runBatPath, "--submissions", "student-submission"], {
-        cwd: projectRoot,
-        shell: true,
-      });
+      const child = isWindows
+        ? spawn("cmd.exe", ["/c", scriptPath, "--submissions", "student-submission"], {
+            cwd: projectRoot,
+            shell: true,
+          })
+        : spawn("sh", [scriptPath, "--submissions", "student-submission"], {
+            cwd: projectRoot,
+          });
 
       child.stdout.on("data", (data) => {
         controller.enqueue(encoder.encode(data.toString()));

@@ -35,9 +35,11 @@ export function getRelevantFiles(sectionText: string, allFilesPaths: string[]): 
   const classMatches = sectionText.match(/[A-Z][a-zA-Z0-9]+/g) || [];
   const uniqueKeywords = new Array(...new Set(classMatches));
 
-  // 2. Extract potential Question markers (e.g., Q1, Q2)
-  const qMarkerMatch = sectionText.match(/\bQ\d+\b/i);
-  const qMarker = qMarkerMatch ? qMarkerMatch[0].toLowerCase() : null;
+  // Extract potential Question markers (e.g., Q1, Q2, "Question 1", "Question 2")
+  const qMatch = sectionText.match(/\bQ(\d+)\b/i);
+  const questionMatch = sectionText.match(/\bQuestion\s+(\d+)\b/i);
+  const qNum = qMatch ? qMatch[1] : questionMatch ? questionMatch[1] : null;
+  const qMarker = qNum ? `q${qNum}` : null;
 
   const relevant = allFilesPaths.filter((filePath) => {
     const fileName = filePath.split("/").pop() || "";
