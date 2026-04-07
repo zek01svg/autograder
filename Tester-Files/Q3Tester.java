@@ -1,8 +1,79 @@
 import java.util.*;
 
-// Assuming Shape, Circle, Rectangle classes are available in the classpath
-// (as they are provided as .class files) and their toString() methods
-// produce output in the format "Name=>Area:Perimeter" with rounded values.
+// --- Mock classes for Shape, Rectangle, Circle and ShapeComparator for testing purposes ---
+// These are minimal implementations to allow the tester to compile and compute expected values.
+// The student's actual classes (Shape, Rectangle, Circle, DataException) are expected to be on the classpath.
+// The student's ShapeComparator.java is also expected to be compiled and used by the student's Q3.java.
+
+// Minimal Shape interface/abstract class to interact with student's code
+// Assuming the methods based on problem description and student's Q3.java main method
+interface IShapeForTest {
+    String getName();
+    double getArea();
+    double getPerimeter();
+    String toString(); // To match student's output format
+}
+
+class MockRectangle implements IShapeForTest {
+    private String name;
+    private double width;
+    private double height;
+
+    public MockRectangle(String name, double width, double height) {
+        this.name = name;
+        this.width = width;
+        this.height = height;
+    }
+
+    @Override
+    public String getName() { return name; }
+
+    @Override
+    public double getArea() { return width * height; }
+
+    @Override
+    public double getPerimeter() { return 2 * (width + height); }
+
+    @Override
+    public String toString() {
+        return name + ">=%s:%.1f".formatted(String.format("%.1f", getArea()), getPerimeter());
+    }
+}
+
+class MockCircle implements IShapeForTest {
+    private String name;
+    private double radius;
+    private static final double CUSTOM_PI = 3.14; // Matching problem's implied PI value
+
+    public MockCircle(String name, double radius) {
+        this.name = name;
+        this.radius = radius;
+    }
+
+    @Override
+    public String getName() { return name; }
+
+    @Override
+    public double getArea() { return CUSTOM_PI * radius * radius; }
+
+    @Override
+    public double getPerimeter() {
+        // Based on sample output (C1=>314.0:63.0 for r=10, 2*3.14*10 = 62.8 rounded to 63)
+        return (double) Math.round(2 * CUSTOM_PI * radius);
+    }
+
+    @Override
+    public String toString() {
+        return name + ">=%s:%.1f".formatted(String.format("%.1f", getArea()), getPerimeter());
+    }
+}
+// --- End Mock classes ---
+
+// Student's ShapeComparator is expected to be public and implement Comparator<Shape>
+// For the tester to compile, if the actual Shape/Rectangle/Circle classes are not directly available,
+// we might need to rely on the student's Q3.java being compiled *first* or have minimal interfaces/base classes here.
+// Assuming student's Shape, Rectangle, Circle, and ShapeComparator are available on classpath for compilation.
+
 public class Q3Tester extends Q3 {
     private static double score;
     private static String qn = "Q3";
@@ -12,10 +83,13 @@ public class Q3Tester extends Q3 {
         System.out.println(score);
     }
 
-    // Helper method to create a string representation of a shape with the expected rounding (nearest integer, then .0 suffix)
-    // This mimics the behavior observed in the student's main method sample outputs.
-    private static String formatShape(String name, double area, double perimeter) {
-        return String.format("%s=>%.1f:%.1f", name, (double)Math.round(area), (double)Math.round(perimeter));
+    // Helper method to create a formatted string from a list of IShapeForTest objects
+    private static String getExpectedString(List<IShapeForTest> shapes) {
+        List<String> formattedStrings = new ArrayList<>();
+        for (IShapeForTest shape : shapes) {
+            formattedStrings.add(shape.toString());
+        }
+        return formattedStrings.toString();
     }
 
     public static void grade() {
@@ -23,179 +97,167 @@ public class Q3Tester extends Q3 {
         System.out.println("---------------------- " + qn + " ----------------------------");
         System.out.println("-------------------------------------------------------");
         int tcNum = 1;
-        score = 0; 
 
-        // Test Case 1: Mixed shapes, some above area threshold (1000), some below.
-        // Should filter out R1 and C1. Then sort R3, C2, R2 by Area Desc, then Perimeter Desc.
+        // Test Case 1: Mixed shapes, some above area 1000 (should be filtered), some ties in area, different perimeters
         {
             try {
-                List<Shape> shapes = new ArrayList<>();
-                shapes.add(new Rectangle("R1", 1000, 2));   // Area 2000 ( > 1000) -> filtered out
-                shapes.add(new Rectangle("R2", 4, 2.5));     // Area 10, Perimeter 13 -> kept
-                shapes.add(new Circle("C1", 50));            // Area ~7854 ( > 1000) -> filtered out
-                shapes.add(new Rectangle("R3", 20, 30));     // Area 600, Perimeter 100 -> kept
-                shapes.add(new Circle("C2", 5));             // Area ~78.5, Perimeter ~31.4 -> kept
+                List<Shape> inputs = new ArrayList<>();
+                inputs.add(new Rectangle("R1", 8, 3)); // Area 24, Perim 22
+                inputs.add(new Rectangle("R2", 6, 4)); // Area 24, Perim 20
+                inputs.add(new Rectangle("R3", 12, 2)); // Area 24, Perim 28
+                inputs.add(new Circle("C1", 10)); // Area 314, Perim 63
+                inputs.add(new Circle("C2", 2)); // Area 12.56, Perim 13
+                inputs.add(new Rectangle("R4", 50, 30)); // Area 1500 (filter out)
+                inputs.add(new Circle("C3", 20)); // Area 1256 (filter out)
 
-                System.out.printf("Test %d: sortShapes(%s)%n", tcNum++, shapes);
+                System.out.printf("Test %d: sortShapes(%s)%n", tcNum++, "Mixed shapes with filtering and ties");
 
-                List<String> expectedList = new ArrayList<>();
-                expectedList.add(formatShape("R3", 600.0, 100.0));
-                expectedList.add(formatShape("C2", Math.PI * 5 * 5, 2 * Math.PI * 5));
-                expectedList.add(formatShape("R2", 10.0, 13.0));
+                // Expected order: C1(314,63), R3(24,28), R1(24,22), R2(24,20), C2(12.56,13)
+                List<IShapeForTest> expectedShapes = new ArrayList<>();
+                expectedShapes.add(new MockCircle("C1", 10));
+                expectedShapes.add(new MockRectangle("R3", 12, 2));
+                expectedShapes.add(new MockRectangle("R1", 8, 3));
+                expectedShapes.add(new MockRectangle("R2", 6, 4));
+                expectedShapes.add(new MockCircle("C2", 2));
+                String expected = getExpectedString(expectedShapes);
 
-                String expected = expectedList.toString();
-                List<Shape> actualShapes = sortShapes(shapes);
-                String actual = actualShapes.toString();
-
+                List<Shape> actual = sortShapes(inputs);
                 System.out.printf("Expected  :|%s|%n", expected);
                 System.out.printf("Actual    :|%s|%n", actual);
-                if (expected.equals(actual)) {
+
+                if (expected.equals(actual.toString())) {
                     score += 1;
                     System.out.println("Passed");
                 } else {
                     System.out.println("Failed");
                 }
             } catch (Exception e) {
-                System.out.println("Failed -> Exception: " + e.getMessage());
+                System.out.println("Failed -> Exception");
                 e.printStackTrace();
             }
             System.out.println("-------------------------------------------------------");
         }
 
-        // Test Case 2: All shapes with area <= 1000, including multiple shapes with identical areas.
-        // Should sort by area descending, then perimeter descending for ties.
+        // Test Case 2: Only rectangles, diverse areas and perimeters, all within limit
         {
             try {
-                List<Shape> shapes = new ArrayList<>();
-                shapes.add(new Rectangle("RA", 50, 10)); // Area 500, Perim 120
-                shapes.add(new Rectangle("RB", 25, 20)); // Area 500, Perim 90
-                shapes.add(new Rectangle("RC", 100, 5)); // Area 500, Perim 210
-                shapes.add(new Circle("C3", 10));       // Area ~314.159, Perim ~62.831
-                shapes.add(new Rectangle("RD", 15, 15)); // Area 225, Perim 60
+                List<Shape> inputs = new ArrayList<>();
+                inputs.add(new Rectangle("RectA", 10, 5)); // Area 50, Perim 30
+                inputs.add(new Rectangle("RectB", 4, 10)); // Area 40, Perim 28
+                inputs.add(new Rectangle("RectC", 20, 2)); // Area 40, Perim 44
+                inputs.add(new Rectangle("RectD", 3, 3)); // Area 9, Perim 12
 
-                System.out.printf("Test %d: sortShapes(%s)%n", tcNum++, shapes);
+                System.out.printf("Test %d: sortShapes(%s)%n", tcNum++, "Only rectangles, diverse values");
 
-                // Expected order: RC (500, 210), RA (500, 120), RB (500, 90), C3 (~314, ~63), RD (225, 60)
-                List<String> expectedList = new ArrayList<>();
-                expectedList.add(formatShape("RC", 500.0, 210.0));
-                expectedList.add(formatShape("RA", 500.0, 120.0));
-                expectedList.add(formatShape("RB", 500.0, 90.0));
-                expectedList.add(formatShape("C3", Math.PI * 10 * 10, 2 * Math.PI * 10));
-                expectedList.add(formatShape("RD", 225.0, 60.0));
+                // Expected order: RectA(50,30), RectC(40,44), RectB(40,28), RectD(9,12)
+                List<IShapeForTest> expectedShapes = new ArrayList<>();
+                expectedShapes.add(new MockRectangle("RectA", 10, 5));
+                expectedShapes.add(new MockRectangle("RectC", 20, 2));
+                expectedShapes.add(new MockRectangle("RectB", 4, 10));
+                expectedShapes.add(new MockRectangle("RectD", 3, 3));
+                String expected = getExpectedString(expectedShapes);
 
-                String expected = expectedList.toString();
-                List<Shape> actualShapes = sortShapes(shapes);
-                String actual = actualShapes.toString();
-
+                List<Shape> actual = sortShapes(inputs);
                 System.out.printf("Expected  :|%s|%n", expected);
                 System.out.printf("Actual    :|%s|%n", actual);
-                if (expected.equals(actual)) {
+
+                if (expected.equals(actual.toString())) {
                     score += 1;
                     System.out.println("Passed");
                 } else {
                     System.out.println("Failed");
                 }
             } catch (Exception e) {
-                System.out.println("Failed -> Exception: " + e.getMessage());
+                System.out.println("Failed -> Exception");
                 e.printStackTrace();
             }
             System.out.println("-------------------------------------------------------");
         }
 
-        // Test Case 3: All shapes in the list have an area greater than 1000.
-        // The resulting list should be empty after filtering.
+        // Test Case 3: Only circles, diverse areas and perimeters
         {
             try {
-                List<Shape> shapes = new ArrayList<>();
-                shapes.add(new Rectangle("R_Large1", 100, 15)); // Area 1500
-                shapes.add(new Circle("C_Large1", 20));       // Area ~1256
-                shapes.add(new Rectangle("R_Large2", 500, 3));  // Area 1500
+                List<Shape> inputs = new ArrayList<>();
+                inputs.add(new Circle("CircA", 5)); // Area 78.5, Perim 31
+                inputs.add(new Circle("CircB", 8)); // Area 200.96, Perim 50
+                inputs.add(new Circle("CircC", 1)); // Area 3.14, Perim 6
 
-                System.out.printf("Test %d: sortShapes(%s)%n", tcNum++, shapes);
+                System.out.printf("Test %d: sortShapes(%s)%n", tcNum++, "Only circles, diverse values");
 
-                String expected = "[]"; 
-                List<Shape> actualShapes = sortShapes(shapes);
-                String actual = actualShapes.toString();
+                // Expected order: CircB(200.96,50), CircA(78.5,31), CircC(3.14,6)
+                List<IShapeForTest> expectedShapes = new ArrayList<>();
+                expectedShapes.add(new MockCircle("CircB", 8));
+                expectedShapes.add(new MockCircle("CircA", 5));
+                expectedShapes.add(new MockCircle("CircC", 1));
+                String expected = getExpectedString(expectedShapes);
 
+                List<Shape> actual = sortShapes(inputs);
                 System.out.printf("Expected  :|%s|%n", expected);
                 System.out.printf("Actual    :|%s|%n", actual);
-                if (expected.equals(actual)) {
+
+                if (expected.equals(actual.toString())) {
                     score += 1;
                     System.out.println("Passed");
                 } else {
                     System.out.println("Failed");
                 }
             } catch (Exception e) {
-                System.out.println("Failed -> Exception: " + e.getMessage());
+                System.out.println("Failed -> Exception");
                 e.printStackTrace();
             }
             System.out.println("-------------------------------------------------------");
         }
 
-        // Test Case 4: Shapes with some having the same area and perimeter, testing stable sort for equal values.
-        // R_Same1 and R_Same2 have identical area and perimeter. Their relative order should be preserved or be consistent.
+        // Test Case 4: All shapes filtered out (area > 1000)
         {
             try {
-                List<Shape> shapes = new ArrayList<>();
-                shapes.add(new Rectangle("R_Same1", 10, 20)); // Area 200, Perim 60
-                shapes.add(new Rectangle("R_Same2", 20, 10)); // Area 200, Perim 60
-                shapes.add(new Rectangle("R_Same3", 5, 40));  // Area 200, Perim 90
-                
-                System.out.printf("Test %d: sortShapes(%s)%n", tcNum++, shapes);
+                List<Shape> inputs = new ArrayList<>();
+                inputs.add(new Rectangle("RBig1", 100, 20)); // Area 2000
+                inputs.add(new Circle("CBig1", 30)); // Area 2826
 
-                // All <= 1000. All areas are 200.
-                // Perimeters: R_Same3=90, R_Same1=60, R_Same2=60.
-                // Order: R_Same3 (highest perim), then R_Same1, R_Same2 (original order for tie).
-                List<String> expectedList = new ArrayList<>();
-                expectedList.add(formatShape("R_Same3", 200.0, 90.0));
-                expectedList.add(formatShape("R_Same1", 200.0, 60.0));
-                expectedList.add(formatShape("R_Same2", 200.0, 60.0));
-
-                String expected = expectedList.toString();
-                List<Shape> actualShapes = sortShapes(shapes);
-                String actual = actualShapes.toString();
-
+                System.out.printf("Test %d: sortShapes(%s)%n", tcNum++, "All shapes filtered out");
+                String expected = "[]";
+                List<Shape> actual = sortShapes(inputs);
                 System.out.printf("Expected  :|%s|%n", expected);
                 System.out.printf("Actual    :|%s|%n", actual);
-                if (expected.equals(actual)) {
+
+                if (expected.equals(actual.toString())) {
                     score += 1;
                     System.out.println("Passed");
                 } else {
                     System.out.println("Failed");
                 }
             } catch (Exception e) {
-                System.out.println("Failed -> Exception: " + e.getMessage());
+                System.out.println("Failed -> Exception");
                 e.printStackTrace();
             }
             System.out.println("-------------------------------------------------------");
         }
 
-        // Test Case 5: List containing only one shape, which is within the area limit.
-        // Should return a list with that single shape.
+        // Test Case 5: Single shape in the list
         {
             try {
-                List<Shape> shapes = new ArrayList<>();
-                shapes.add(new Circle("C_Single", 12)); // Area ~452.38, Perim ~75.39
+                List<Shape> inputs = new ArrayList<>();
+                inputs.add(new Rectangle("SingleR", 15, 10)); // Area 150, Perim 50
 
-                System.out.printf("Test %d: sortShapes(%s)%n", tcNum++, shapes);
+                System.out.printf("Test %d: sortShapes(%s)%n", tcNum++, "Single shape");
 
-                List<String> expectedList = new ArrayList<>();
-                expectedList.add(formatShape("C_Single", Math.PI * 12 * 12, 2 * Math.PI * 12));
+                List<IShapeForTest> expectedShapes = new ArrayList<>();
+                expectedShapes.add(new MockRectangle("SingleR", 15, 10));
+                String expected = getExpectedString(expectedShapes);
 
-                String expected = expectedList.toString();
-                List<Shape> actualShapes = sortShapes(shapes);
-                String actual = actualShapes.toString();
-
+                List<Shape> actual = sortShapes(inputs);
                 System.out.printf("Expected  :|%s|%n", expected);
                 System.out.printf("Actual    :|%s|%n", actual);
-                if (expected.equals(actual)) {
+
+                if (expected.equals(actual.toString())) {
                     score += 1;
                     System.out.println("Passed");
                 } else {
                     System.out.println("Failed");
                 }
             } catch (Exception e) {
-                System.out.println("Failed -> Exception: " + e.getMessage());
+                System.out.println("Failed -> Exception");
                 e.printStackTrace();
             }
             System.out.println("-------------------------------------------------------");
