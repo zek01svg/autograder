@@ -3,7 +3,7 @@ import * as Gemini from "@tanstack/ai-gemini";
 import { TestFilesOutputSchema, TestFilesOutput } from "./schema";
 import { normalizeChatError } from "./error-utils";
 
-const DEFAULT_MODEL_NAME = "gemini-3-flash-preview";
+const DEFAULT_MODEL_NAME = "gemini-2.5-flash";
 
 export async function generateTestFiles({
   questionPaper,

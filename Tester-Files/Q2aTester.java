@@ -6,21 +6,30 @@ public class Q2aTester extends Q2a {
     private static String qn = "Q2a";
 
     public static void main(String[] args) {
-        prepareFile();
+        // Create personstester.txt for testing. This file contains custom data for these test cases.
+        createPersonsTesterFile("personstester.txt");
+
         grade();
         System.out.println(score);
     }
 
-    private static void prepareFile() {
-        try (PrintWriter out = new PrintWriter(new FileWriter("personstester.txt"))) {
-            out.println("John LEE-28");
-            out.println("LIM Peter-40");
-            out.println("LEE Teck Leong-44");
-            out.println("Mary CHAN-30");
-            out.println("CHAN Wei Jun-24");
-            out.println("Jason WONG-25");
-        } catch (IOException e) {
-            e.printStackTrace();
+    // Helper method to create a personstester.txt file with custom test data.
+    private static void createPersonsTesterFile(String filename) {
+        try (PrintWriter pw = new PrintWriter(filename)) {
+            pw.println("John LEE-28");
+            pw.println("LIM Peter-40");
+            pw.println("LEE Teck Leong-44");
+            pw.println("Mary CHAN-30");
+            pw.println("Andrew TAN-50");
+            pw.println("CHAN Wei Jun-24");
+            pw.println("TEO Wong Whee-30");
+            pw.println("Jason WONG-25");
+            pw.println("Alice Smith-20"); // Surname Smith
+            pw.println("Bob SMITH-30"); // Surname SMITH
+            pw.println("Charlie BROWN-20"); // Surname BROWN
+            pw.println("David LEE-32"); // Additional LEE for multiple matches
+        } catch (FileNotFoundException e) {
+            System.err.println("Error creating test file: " + filename + " - " + e.getMessage());
         }
     }
 
@@ -29,91 +38,124 @@ public class Q2aTester extends Q2a {
         System.out.println("---------------------- " + qn + " ----------------------------");
         System.out.println("-------------------------------------------------------");
         int tcNum = 1;
+        score = 0; 
 
-        // Test 1: Multiple matches (LEE)
+        // Test Case 1: Existing surname with multiple matches (e.g., "LEE")
+        // Expects average of ages for "John LEE" (28), "LEE Teck Leong" (44), and "David LEE" (32).
         {
             try {
                 String filename = "personstester.txt";
                 String surname = "LEE";
                 System.out.printf("Test %d: getAverageAge(%s, %s)%n", tcNum++, filename, surname);
-                double expected = 36.0;
-                double result = getAverageAge(filename, surname);
-                System.out.printf("Expected  :|%.1f|%n", expected);
-                System.out.printf("Actual    :|%.1f|%n", result);
-                if (expected == result) {
+                double expected = (28.0 + 44.0 + 32.0) / 3.0; // Expected: 34.666...
+                double actual = getAverageAge(filename, surname);
+                System.out.printf("Expected  :|%.3f|%n", expected);
+                System.out.printf("Actual    :|%.3f|%n", actual);
+                if (Math.abs(expected - actual) < 0.001) { // Using a small epsilon for double comparison
                     score += 1;
                     System.out.println("Passed");
                 } else {
                     System.out.println("Failed");
                 }
             } catch (Exception e) {
-                System.out.println("Failed -> Exception");
+                System.out.println("Failed -> Exception: " + e.getMessage());
+                e.printStackTrace();
             }
             System.out.println("-------------------------------------------------------");
         }
 
-        // Test 2: Case-insensitive match (chan)
+        // Test Case 2: Existing surname with a single match (e.g., "WONG")
+        // Expects the age of "Jason WONG" (25).
         {
             try {
                 String filename = "personstester.txt";
-                String surname = "chan";
+                String surname = "WONG";
                 System.out.printf("Test %d: getAverageAge(%s, %s)%n", tcNum++, filename, surname);
-                double expected = 27.0;
-                double result = getAverageAge(filename, surname);
-                System.out.printf("Expected  :|%.1f|%n", expected);
-                System.out.printf("Actual    :|%.1f|%n", result);
-                if (expected == result) {
+                double expected = 25.0; 
+                double actual = getAverageAge(filename, surname);
+                System.out.printf("Expected  :|%.3f|%n", expected);
+                System.out.printf("Actual    :|%.3f|%n", actual);
+                if (Math.abs(expected - actual) < 0.001) {
                     score += 1;
                     System.out.println("Passed");
                 } else {
                     System.out.println("Failed");
                 }
             } catch (Exception e) {
-                System.out.println("Failed -> Exception");
+                System.out.println("Failed -> Exception: " + e.getMessage());
+                e.printStackTrace();
             }
             System.out.println("-------------------------------------------------------");
         }
 
-        // Test 3: No matches
+        // Test Case 3: Existing surname, checking case-insensitivity and handling surnames as first/last words (e.g., "smith")
+        // Expects average of ages for "Alice Smith" (20) and "Bob SMITH" (30).
         {
             try {
                 String filename = "personstester.txt";
-                String surname = "TAN";
+                String surname = "smith"; // Should match "Smith" (last name) and "SMITH" (last name)
+                System.out.printf("Test %d: getAverageAge(%s, %s)%n", tcNum++, filename, surname);
+                double expected = (20.0 + 30.0) / 2.0; 
+                double actual = getAverageAge(filename, surname);
+                System.out.printf("Expected  :|%.3f|%n", expected);
+                System.out.printf("Actual    :|%.3f|%n", actual);
+                if (Math.abs(expected - actual) < 0.001) {
+                    score += 1;
+                    System.out.println("Passed");
+                } else {
+                    System.out.println("Failed");
+                }
+            } catch (Exception e) {
+                System.out.println("Failed -> Exception: " + e.getMessage());
+                e.printStackTrace();
+            }
+            System.out.println("-------------------------------------------------------");
+        }
+
+        // Test Case 4: Non-existent surname in the file.
+        // Expects 0.0 as per problem specification.
+        {
+            try {
+                String filename = "personstester.txt";
+                String surname = "GOH";
                 System.out.printf("Test %d: getAverageAge(%s, %s)%n", tcNum++, filename, surname);
                 double expected = 0.0;
-                double result = getAverageAge(filename, surname);
+                double actual = getAverageAge(filename, surname);
                 System.out.printf("Expected  :|%.1f|%n", expected);
-                System.out.printf("Actual    :|%.1f|%n", result);
-                if (expected == result) {
+                System.out.printf("Actual    :|%.1f|%n", actual);
+                if (Math.abs(expected - actual) < 0.001) {
                     score += 1;
                     System.out.println("Passed");
                 } else {
                     System.out.println("Failed");
                 }
             } catch (Exception e) {
-                System.out.println("Failed -> Exception");
+                System.out.println("Failed -> Exception: " + e.getMessage());
+                e.printStackTrace();
             }
             System.out.println("-------------------------------------------------------");
         }
 
-        // Test 4: File not found
+        // Test Case 5: Non-existent file.
+        // Expects -1.0 as per problem specification.
         {
             try {
-                String filename = "missing.txt";
-                String surname = "LEE";
+                String filename = "nonexistenttester.txt"; // A file that definitely won't exist
+                String surname = "ANY";
                 System.out.printf("Test %d: getAverageAge(%s, %s)%n", tcNum++, filename, surname);
                 double expected = -1.0;
-                double result = getAverageAge(filename, surname);
+                double actual = getAverageAge(filename, surname);
                 System.out.printf("Expected  :|%.1f|%n", expected);
-                System.out.printf("Actual    :|%.1f|%n", result);
-                if (expected == result) {
+                System.out.printf("Actual    :|%.1f|%n", actual);
+                if (Math.abs(expected - actual) < 0.001) {
                     score += 1;
                     System.out.println("Passed");
                 } else {
                     System.out.println("Failed");
                 }
             } catch (Exception e) {
-                System.out.println("Failed -> Exception");
+                System.out.println("Failed -> Exception: " + e.getMessage());
+                e.printStackTrace();
             }
             System.out.println("-------------------------------------------------------");
         }

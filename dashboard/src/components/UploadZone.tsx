@@ -42,9 +42,9 @@ export function UploadZone({ onFilesSelected, preloadedTesterFiles }: UploadZone
   useEffect(() => {
     const initPdf = async () => {
       try {
-        const { getDocument, GlobalWorkerOptions, version } = await import("pdfjs-dist");
-        GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${version}/pdf.worker.min.mjs`;
-        pdfjsLib = { getDocument };
+        const pdfjs = await import("pdfjs-dist");
+        pdfjs.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.mjs`;
+        pdfjsLib = { getDocument: pdfjs.getDocument };
       } catch (e) {
         console.error("Failed to load PDF.js", e);
       }
@@ -64,7 +64,8 @@ export function UploadZone({ onFilesSelected, preloadedTesterFiles }: UploadZone
         text += content.items.map((item: any) => item.str).join(" ") + "\n";
       }
       return text;
-    } catch {
+    } catch (e) {
+      console.error("PDF parsing error:", e);
       return "Error parsing PDF.";
     }
   };
@@ -276,30 +277,24 @@ export function UploadZone({ onFilesSelected, preloadedTesterFiles }: UploadZone
               Assignment
             </h3>
             <p className="text-[10px] text-muted-foreground mt-0.5">
-              Upload PDF or paste question paper text
+              Upload question paper PDF
             </p>
           </div>
-          <div className="border-2 border-dashed border-border rounded-none p-4 space-y-3 hover:border-indigo-500 hover:bg-indigo-500/5 transition-all">
-            <textarea
-              value={questionPaper}
-              onChange={(e) => setQuestionPaper(e.target.value)}
-              placeholder="Paste question paper text here..."
-              className="w-full h-32 bg-transparent border-none focus:ring-0 text-foreground font-mono text-xs resize-none placeholder:text-muted-foreground/50 outline-none"
+          <label className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-border rounded-none p-6 cursor-pointer hover:border-indigo-500 hover:bg-indigo-500/5 transition-all text-center">
+            <FileText className="w-8 h-8 text-muted-foreground" />
+            <div>
+              <div className="text-xs font-black text-foreground uppercase tracking-widest">
+                {paperFile ? paperFile.name : "Select question paper"}
+              </div>
+              <div className="text-[10px] text-muted-foreground mt-0.5">PDF, TXT, or MD file</div>
+            </div>
+            <input
+              type="file"
+              className="hidden"
+              accept=".pdf,.txt,.md"
+              onChange={handleFileUpload}
             />
-            <div className="h-px bg-border w-full" />
-            <label className="flex items-center justify-center gap-3 py-2.5 px-6 bg-secondary border border-border rounded-none cursor-pointer hover:bg-muted transition-all w-fit mx-auto group/btn">
-              <FileText className="w-4 h-4 text-muted-foreground group-hover/btn:text-indigo-600 dark:group-hover/btn:text-indigo-400 transition-colors" />
-              <span className="text-[10px] font-black text-muted-foreground group-hover/btn:text-foreground uppercase tracking-widest">
-                {paperFile ? paperFile.name : "Upload PDF"}
-              </span>
-              <input
-                type="file"
-                className="hidden"
-                accept=".pdf,.txt,.md"
-                onChange={handleFileUpload}
-              />
-            </label>
-          </div>
+          </label>
         </Card>
 
         <Card className={`backdrop-blur-xl p-6 rounded-none border-2 space-y-3 transition-colors ${templateFolderCount > 0 ? "border-emerald-500/40 bg-emerald-500/5" : "border-border bg-card/50"}`}>

@@ -73,9 +73,9 @@ export default function DashboardPage() {
 
       console.log(`[AutoGrader] Question paper split into ${sections.length} section(s). Template has ${filePaths.length} file(s).`);
 
-      // If only 1 section (PDF couldn't be split), send everything in one shot
-      const useSingleShot = sections.length <= 1;
-      const iterSections = useSingleShot ? [data.questionPaper] : sections;
+      // Force single-shot mode: send everything in one API call for speed
+      const useSingleShot = true;
+      const iterSections = [data.questionPaper];
 
       for (let i = 0; i < iterSections.length; i++) {
         const sectionText = iterSections[i];
