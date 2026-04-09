@@ -1,32 +1,31 @@
-import { NextResponse } from "next/server";
 import { generateTestFiles } from "@/lib/ai";
+
+export const maxDuration = 900; // 15 minutes
+export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
     const { questionPaper, templateStructure } = await request.json();
 
     if (!questionPaper || !templateStructure) {
-      return NextResponse.json(
+      return Response.json(
         { error: "Question paper and template structure are required." },
         { status: 400 },
       );
     }
 
-    const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    if (!apiKey || apiKey === "your_api_key_here") {
-      return NextResponse.json(
-        { error: "Missing GOOGLE_GENERATIVE_AI_API_KEY in server environment." },
-        { status: 500 },
-      );
-    }
-
-    const testFiles = await generateTestFiles({
+    const stream = await generateTestFiles({
       questionPaper,
       templateStructure,
-      apiKey,
     });
 
-    return NextResponse.json({ files: testFiles });
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+      },
+    });
   } catch (error: any) {
     console.error("AI Generation API Error:", error);
 
@@ -38,7 +37,7 @@ export async function POST(request: Request) {
       headers.set("Retry-After", String(retryAfter));
     }
 
-    return NextResponse.json(
+    return Response.json(
       {
         error: error.message || "Failed to generate test files.",
         retryAfterSeconds: retryAfter,

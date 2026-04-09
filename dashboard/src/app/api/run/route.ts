@@ -1,14 +1,20 @@
-import { spawn } from "child_process";
-import path from "path";
+import { checkDocker } from "@/lib/docker";
 
 export async function POST() {
+  try {
+    await checkDocker();
+  } catch (error: any) {
+    logger.error(`[API/Run] Pre-flight check failed: ${error.message}`);
+    return Response.json({ error: error.message }, { status: 503 });
+  }
+
   const encoder = new TextEncoder();
   const isWindows = process.platform === "win32";
   const scriptName = isWindows ? "run.bat" : "run.sh";
   const scriptPath = path.resolve(process.cwd(), "..", "scripts", scriptName);
   const projectRoot = path.resolve(process.cwd(), "..");
 
-  console.log(`Starting Java Grader from: ${scriptPath} (platform: ${process.platform})`);
+  logger.info(`Starting Java Grader from: ${scriptPath} (platform: ${process.platform})`);
 
   const stream = new ReadableStream({
     start(controller) {

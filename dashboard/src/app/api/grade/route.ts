@@ -1,7 +1,14 @@
 import { spawn } from "child_process";
 import path from "path";
+import { checkDocker } from "@/lib/docker";
 
 export async function POST() {
+  try {
+    await checkDocker();
+  } catch (error: any) {
+    return Response.json({ error: error.message }, { status: 503 });
+  }
+
   const projectRoot = path.resolve(process.cwd(), "..");
   const encoder = new TextEncoder();
 
