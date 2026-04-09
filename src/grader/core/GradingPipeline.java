@@ -45,26 +45,26 @@ public class GradingPipeline {
     this.config = config;
   }
 
-  public void run() {
+  public boolean run() {
     System.out.println("Starting full grading pipeline...");
 
     // Check Prerequisites
     File subDir = new File(submissionsDir);
     if (!subDir.exists() || !subDir.isDirectory()) {
       System.err.println("ERROR: Submissions directory not found: " + submissionsDir);
-      return;
+      return false;
     }
 
     File testDir = new File(testersDir);
     if (!testDir.exists() || !testDir.isDirectory()) {
       System.err.println("ERROR: Testers directory not found: " + testersDir);
-      return;
+      return false;
     }
 
     File tempDir = new File(templateDir);
     if (!tempDir.exists() || !tempDir.isDirectory()) {
       System.err.println("ERROR: Template directory not found: " + templateDir);
-      return;
+      return false;
     }
 
     // 1. Validate
@@ -72,7 +72,7 @@ public class GradingPipeline {
     File[] zipFiles = subDir.listFiles((d, name) -> name.toLowerCase().endsWith(".zip"));
     if (zipFiles == null || zipFiles.length == 0) {
       System.out.println("No .zip files found in " + submissionsDir);
-      return;
+      return false;
     }
 
     Validator validator;
@@ -80,7 +80,7 @@ public class GradingPipeline {
       validator = new Validator(templateDir, true);
     } catch (IOException e) {
       System.err.println("ERROR: Could not load template from '" + templateDir + "': " + e.getMessage());
-      return;
+      return false;
     }
 
     List<File> validZips = new ArrayList<>();
@@ -106,7 +106,7 @@ public class GradingPipeline {
       System.err.println("    The AutoGrader requires Docker to execute student code safely.");
       System.err.println("    Please start Docker Desktop and ensure 'docker info' works in your terminal.");
       runner.shutdown();
-      return;
+      return false;
     }
 
     Grader grader = new Grader();
@@ -115,7 +115,7 @@ public class GradingPipeline {
     if (testCases.length == 0) {
       System.err.println("ERROR: No test cases found. Aborting to avoid zeroed results.");
       runner.shutdown();
-      return;
+      return false;
     }
 
     ProgressBar progressBar = new ProgressBar("Grading", validZips.size());
@@ -170,6 +170,8 @@ public class GradingPipeline {
         System.err.println("ERROR: Failed to write CSV: " + e.getMessage());
       }
     }
+
+    return true;
   }
 
   private String[][] buildTestCases(String configQuestions) {
@@ -343,9 +345,3 @@ public class GradingPipeline {
   }
 
 }
-
-
-
-
-
-
