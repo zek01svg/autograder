@@ -13,7 +13,12 @@ export const TestFileSchema = z.object({
     .describe("The specific question number or reference from the question paper (e.g., 'Q1a')"),
 });
 
-export const TestFilesOutputSchema = z.array(TestFileSchema);
+export const TestFilesOutputSchema = z.object({
+  thinking: z
+    .string()
+    .describe("Explain your step-by-step plan for generating these tester files."),
+  files: z.array(TestFileSchema),
+});
 
 export type TestFile = z.infer<typeof TestFileSchema>;
 export type TestFilesOutput = z.infer<typeof TestFilesOutputSchema>;

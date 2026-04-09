@@ -106,7 +106,9 @@ public class Main {
     } else {
       GradingPipeline pipeline = new GradingPipeline(
           submissionsDir, testersDir, scoresheetPath, outputPath, workDir, templateDir, config);
-      pipeline.run();
+      if (!pipeline.run()) {
+        System.exit(1);
+      }
     }
   }
 

@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 const outfit = Outfit({
-  variable: "--font-heading", // Branded mapping
+  variable: "--font-heading",
   subsets: ["latin"],
 });
 

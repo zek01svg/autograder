@@ -1,30 +1,36 @@
-# AutoGrader Dashboard
+# 🎨 AutoGrader Dashboard
 
 Next.js web UI for the IS442 AutoGrader. Provides two grading workflows and displays per-question results with score distribution charts.
 
 ---
 
-## Prerequisites
+## 📦 Prerequisites
 
 - **Node.js 18+**
 - **pnpm**
+- **Ollama** installed locally (with `qwen2.5-coder:3b`)
 - Java grader compiled (`../out/` must exist — run `scripts/compile` from the project root)
 - **Docker Desktop** running (required when grading executes)
 
 ---
 
-## Setup
+## 🚀 Setup
 
 ```sh
+# Run dev server
 pnpm install
 pnpm dev
+
+# Build for production
+pnpm build
+pnpm start
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
 
 ---
 
-## Workflows
+## 🔄 Workflows
 
 ### Direct mode (bring your own tests)
 
@@ -44,27 +50,32 @@ For when tester files don't exist yet:
 
 1. Paste the question paper or upload a PDF / `.txt` / `.md`
 2. Select the `RenameToYourUsername/` template folder
-3. Click **Start Autograder** — Gemini generates JUnit test files
+3. Click **Start Autograder** — Local Ollama generates Java tester files
 4. Review and edit the generated tests in the editor
-5. Click **Save & Continue**, then **Start Execution**
+5. Click **Commit All Tests** — App saves tests to `../Tester-Files/` and jumps to execution
+6. Click **Download All Test Files (.ZIP)** to get a bundled suite (uses JSZip client-side)
 
 ---
-
-## Architecture
 
 ```mermaid
 flowchart LR
     subgraph Browser
         UI["Next.js UI"]
+        JSZip["JSZip\nBundler"]
     end
 
     subgraph Next.js API Routes
         Upload["/api/upload\nSave & reconstruct files"]
         Grade["/api/grade\nSpawn Java grader"]
         Run["/api/run\nSpawn Java grader (AI path)"]
-        Generate["/api/generate\nGemini AI → JUnit tests"]
-        Save["/api/save\nWrite tests to disk"]
+        Generate["/api/generate\nOllama SDK → NDJSON Stream"]
+        Save["/api/save\nWrite tests to ../Tester-Files"]
         Results["/api/results\nParse CSV + HTML"]
+        Pino["Pino Layer\nStructured Logs"]
+    end
+
+    subgraph Local LLM
+        Ollama["Ollama Engine\n(qwen2.5-coder:3b)"]
     end
 
     subgraph Java Grader
@@ -75,49 +86,51 @@ flowchart LR
 
     subgraph Filesystem
         WebUploads["web-uploads/"]
+        TesterFiles["../Tester-Files/"]
         ResultsDir["results/\nresults.csv\nreport.html"]
     end
 
     UI -- "Direct mode" --> Upload --> WebUploads
     UI -- "Start Execution (Direct)" --> Grade
     UI -- "Start Execution (AI)" --> Run
-    UI -- "Generate mode" --> Generate --> Save
+    UI -- "Generate mode" --> Generate --> Ollama
+    Ollama -- "JSON Samples" --> Generate
+    Generate -- "NDJSON Stream" --> UI
+    UI -- "Commit" --> Save --> TesterFiles
+    UI -- "Download" --> JSZip --> UI
     Grade --> Main
     Run --> Main
     Main --> Pipeline --> Docker
     Docker --> ResultsDir
     UI -- "Fetch results" --> Results
     Results --> ResultsDir
+    Generate -.-> Pino
+    Save -.-> Pino
+    Run -.-> Pino
 ```
 
 ---
 
-## API Routes
+## 🌐 API Routes
 
-| Route           | Method | Description                                                                                 |
-| --------------- | ------ | ------------------------------------------------------------------------------------------- |
+| Route | Method | Description |
+| --- | --- | --- |
 | `/api/upload`   | POST   | Accepts multipart form data (`submissions`, `testers`, `template`), saves to `web-uploads/` |
 | `/api/grade`    | POST   | Streams output from `grader.Main` using the `web-uploads/` directories                      |
 | `/api/run`      | POST   | Streams output from `grader.Main` using the saved AI-generated tests                        |
-| `/api/generate` | POST   | Sends question paper to Gemini, returns generated JUnit test files                          |
-| `/api/save`     | POST   | Writes approved test files to `tests/`                                                      |
+| `/api/generate` | POST   | Streams NDJSON from local Ollama for incremental test generation                            |
+| `/api/save`     | POST   | Writes approved test files to `../Tester-Files/` (recursive)                                |
 | `/api/results`  | GET    | Reads `results/results.csv` and `results/report.html`, returns parsed JSON                  |
 
 ---
 
-## Environment Variables
+## 🔐 Environment Variables
 
-Create a `.env.local` in this directory:
-
-```env
-GEMINI_API_KEY=your_api_key_here
-```
-
-Required only for Generate mode.
+Not currently required for Local AI mode. Ensure Ollama is running at `http://localhost:11434`.
 
 ---
 
-## Project Structure
+## 📂 Project Structure
 
 ```mermaid
 graph TD
@@ -147,6 +160,6 @@ graph TD
     components --> ScoreDistribution["ScoreDistribution.tsx — Recharts bell curve"]
 
     lib --> schema["schema.ts — Zod types"]
-    lib --> utils["utils.ts — question paper splitting"]
-    lib --> ai["ai.ts — Gemini client"]
+    lib --> pino["pino.ts — Structured Logger"]
+    lib --> ai["ai.ts — Ollama SDK client"]
 ```

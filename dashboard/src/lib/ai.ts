@@ -1,153 +1,114 @@
-import { chat } from "@tanstack/ai";
-import * as Gemini from "@tanstack/ai-gemini";
-import { TestFilesOutputSchema, TestFilesOutput } from "./schema";
-import { normalizeChatError } from "./error-utils";
+import { Ollama } from "ollama";
+import { z } from "zod";
+import { zodToJsonSchema } from "zod-to-json-schema";
+import { TestFilesOutputSchema } from "./schema";
 
-const DEFAULT_MODEL_NAME = "gemini-2.5-flash";
+const DEFAULT_MODEL_NAME = "qwen2.5-coder:3b";
+
+const customFetch = (input: RequestInfo | URL, init?: RequestInit) => {
+  return fetch(input, {
+    ...init,
+    // @ts-ignore
+    headersTimeout: 900000,
+    bodyTimeout: 900000,
+    connectTimeout: 60000,
+  });
+};
+
+const ollama = new Ollama({ 
+  host: "http://localhost:11434",
+  fetch: customFetch as any,
+});
 
 export async function generateTestFiles({
   questionPaper,
   templateStructure,
-  apiKey,
 }: {
   questionPaper: string;
   templateStructure: string;
-  apiKey: string;
-}): Promise<TestFilesOutput> {
-  const systemPrompt = `You are an expert Java Test Engineer for an OOP course auto-grading system.
-Generate Java tester files based on the Question Paper and Student Template code below.
+}): Promise<ReadableStream<any>> {
+  logger.info({
+    msg: "Starting generation with Structured Outputs",
+    model: DEFAULT_MODEL_NAME
+  });
 
-STUDENT TEMPLATE (with source code):
+  const systemPrompt = `You are an expert Java Test Grader.
+Your goal is to generate Java tester files that extend student classes and provide a final score.
+
+STUDENT TEMPLATE CONTEXT:
 ${templateStructure}
 
-QUESTION PAPER:
-${questionPaper}
+### MANDATORY RULES:
+1. ONLY generate the Tester classes. DO NOT re-write the student base files.
+2. Filenames MUST end in 'Tester.java' (e.g. Q1aTester.java).
+3. Classes MUST extend the base question (e.g. public class Q1aTester extends Q1a).
+4. Logic: Use a 'public static int grade()' method to run tests and return a score.
+5. Final Output: main() must print ONLY the final score integer on the last line.
+6. NO decorative lines (---). NO verbose logging.
 
-### TESTER FILE CONVENTION (MUST FOLLOW EXACTLY)
-The auto-grader parses stdout to extract scores. You MUST use this exact format:
-1. **Filename**: \`{QuestionId}Tester.java\` (e.g., Q1aTester.java, Q2bTester.java, Q3Tester.java)
-2. **No package declaration**. Import \`java.util.*\` at the top.
-3. **Class extends the student's class**: e.g., \`public class Q1aTester extends Q1a {}\`
-4. **Fields**: \`private static double score;\` and \`private static String qn = "Q1a";\`
-5. **main()**: Call grade(), then print score: \`System.out.println(score);\` — MUST be the last stdout line.
-6. **grade()**: Contains all test cases. NO JUnit — use plain Java with try-catch.
-7. **Stdout format per test case**:
-   - \`System.out.printf("Test %d: methodName(%s)%n", tcNum++, inputs);\`
-   - \`System.out.printf("Expected  :|%s|%n", expected);\`
-   - \`System.out.printf("Actual    :|%s|%n", result);\`
-   - Print "Passed" or "Failed"
-   - On pass: \`score += 1;\`
-
-### EXAMPLE TESTER:
-\`\`\`java
-import java.util.*;
-
-public class Q1aTester extends Q1a {
-    private static double score;
-    private static String qn = "Q1a";
-
-    public static void main(String[] args) {
-        grade();
-        System.out.println(score);
-    }
-
-    public static void grade() {
-        System.out.println("-------------------------------------------------------");
-        System.out.println("---------------------- " + qn + " ----------------------------");
-        System.out.println("-------------------------------------------------------");
-        int tcNum = 1;
-        {
-            try {
-                ArrayList<String> inputs = new ArrayList<>();
-                inputs.add("alice");
-                System.out.printf("Test %d: methodName(%s)%n", tcNum++, inputs);
-                ArrayList<String> expected = new ArrayList<>(Arrays.asList("alice"));
-                ArrayList<String> result = methodName(inputs);
-                System.out.printf("Expected  :|%s|%n", expected);
-                System.out.printf("Actual    :|%s|%n", result);
-                if (expected.equals(result)) {
-                    score += 1;
-                    System.out.println("Passed");
-                } else {
-                    System.out.println("Failed");
-                }
-            } catch (Exception e) {
-                System.out.println("Failed -> Exception");
-                e.printStackTrace();
-            }
-            System.out.println("-------------------------------------------------------");
-        }
-    }
+### EXAMPLE STRUCTURE (Q1aTester.java):
+{
+  "filename": "RenameToYourUsername/Q1/Q1aTester.java",
+  "code": "import java.util.*;\npublic class Q1aTester extends Q1a {\n    public static void main(String[] args) {\n        System.out.println(grade());\n    }\n    public static int grade() {\n        int score = 0;\n        try {\n            if (getIsogramWords(new ArrayList<>(Arrays.asList(\"cat\"))).size() == 1) score += 10;\n        } catch (Exception e) {} \n        return score;\n    }\n}"
 }
-\`\`\`
-
-### FOR EXCEPTION TESTING (e.g., DataException):
-\`\`\`java
-try {
-    String result = someMethod(args);
-    System.out.println("Failed -> Expecting a Data Exception");
-} catch (DataException ex) {
-    System.out.println("Passed");
-    score += 1;
-} catch (Exception e) {
-    System.out.println("Failed -> Exception");
-    e.printStackTrace();
-}
-\`\`\`
-
-### RULES:
-- Generate ONE tester file per sub-question (Q1a, Q1b, Q2a, Q2b, Q3, etc.)
-- Analyze the student's Java source code to find method signatures, parameter types, return types
-- The tester extends the student's class, so call methods DIRECTLY (no object instantiation needed)
-- Include 3-5 test cases per tester covering normal, edge, and boundary cases
-- SCORING: Each test case is worth EXACTLY 1 point. ALWAYS use \`score += 1;\` — NEVER use fractional values like 0.5
-- Use realistic test data derived from the question paper requirements
-- If the question references data files (.txt), use filenames from the template but with "tester" suffix (e.g., "personstester.txt")
-- CODE MUST use real newlines and 4-space indentation — NO minification
 `;
 
-  const adapter = Gemini.createGeminiChat(DEFAULT_MODEL_NAME, apiKey);
   try {
-    const response = await chat({
-      adapter,
-      systemPrompts: [systemPrompt],
+    const stream = await ollama.chat({
+      model: DEFAULT_MODEL_NAME,
       messages: [
-        {
-          role: "user",
-          content: "Generate the test files for this assignment based on the provided context.",
+        { role: "system", content: systemPrompt },
+        { 
+          role: "user", 
+          content: "Generate all requested test files (Q1aTester, Q1bTester, Q2aTester, Q2bTester, Q3Tester) as a JSON object with 'thinking' and 'files' (array of {filename, code})." 
         },
       ],
-      outputSchema: TestFilesOutputSchema,
+      format: {
+        type: "object",
+        properties: {
+          thinking: { type: "string" },
+          files: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                filename: { type: "string" },
+                code: { type: "string" }
+              },
+              required: ["filename", "code"]
+            }
+          }
+        },
+        required: ["thinking", "files"]
+      } as any,
+      stream: true,
+      options: {
+        num_ctx: 32768,
+        num_predict: 16384,
+        temperature: 0,
+      }
     });
 
-    const files = response as TestFilesOutput;
-
-    // Safety post-processing: expand minified code to ensure vertical layout
-    const formattedFiles = files.map((file) => ({
-      ...file,
-      code:
-        file.code.includes("\n") && file.code.split("\n").length > 5
-          ? file.code
-          : file.code
-              .replace(/package\s+([\w.]+);/g, "package $1;\n\n")
-              .replace(/import\s+([\w.*]+);/g, "import $1;\n")
-              .replace(/public\s+class/g, "\npublic class")
-              .replace(/\{/g, " {\n")
-              .replace(/\}/g, "\n}\n")
-              .replace(/;/g, ";\n")
-              .replace(/\n\s*\n/g, "\n\n")
-              .trim(),
-    }));
-
-    return formattedFiles as TestFilesOutput;
+    return new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder();
+        try {
+          for await (const chunk of stream) {
+            const data = JSON.stringify({
+              type: "content",
+              delta: chunk.message.content,
+            });
+            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+          }
+          controller.close();
+        } catch (error) {
+          console.error("[AI Stream] Error during streaming:", error);
+          controller.error(error);
+        }
+      },
+    });
   } catch (error: unknown) {
-    const normalized = normalizeChatError(error);
-    console.error("AI Generation Error Normalized:", normalized);
-
-    // Throw a specialized error object that the API route can handle
-    const enhancedError = new Error(normalized.message);
-    (enhancedError as any).status = normalized.status;
-    (enhancedError as any).retryAfterSeconds = normalized.retryAfterSeconds;
-    throw enhancedError;
+    console.error("Ollama direct generation error:", error);
+    throw error;
   }
 }

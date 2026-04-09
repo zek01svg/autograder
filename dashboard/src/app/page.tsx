@@ -21,7 +21,8 @@ import {
 import { ScoreDistribution } from "@/components/ScoreDistribution";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { TestFile } from "@/lib/schema";
-import { splitQuestionPaper, getRelevantFiles } from "@/lib/utils";
+import JSZip from "jszip";
+import { toast } from "sonner";
 
 type Step = "upload" | "review" | "run";
 
@@ -39,6 +40,7 @@ export default function DashboardPage() {
   const [preloadedTesters, setPreloadedTesters] = useState<File[]>([]);
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [thinkingText, setThinkingText] = useState<string>("");
 
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
@@ -55,83 +57,107 @@ export default function DashboardPage() {
   // 1. Generate Mutation
   const generateMutation = useMutation({
     mutationFn: async (data: { questionPaper: string; templateStructure: string }) => {
-      const sections = splitQuestionPaper(data.questionPaper);
-      const allFilesMap = new Map<string, TestFile>();
+      setThinkingText("Initializing local AI...");
+      
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          questionPaper: data.questionPaper,
+          templateStructure: data.templateStructure,
+        }),
+      });
 
-      // Parse template blocks to extract file paths and their content
-      const blocks = data.templateStructure.split(/(?=--- FILE: )/);
-      const filePaths: string[] = [];
-      const pathToBlock = new Map<string, string>();
-
-      for (const block of blocks) {
-        const match = block.match(/^--- FILE: (.+?)(?:\s+\(.*?\))? ---/);
-        if (match) {
-          filePaths.push(match[1]);
-          pathToBlock.set(match[1], block.trim());
-        }
+      if (!response.ok) {
+        throw new Error(`Failed to generate: ${response.statusText}`);
       }
 
-      console.log(`[AutoGrader] Question paper split into ${sections.length} section(s). Template has ${filePaths.length} file(s).`);
-
-      // Force single-shot mode: send everything in one API call for speed
-      const useSingleShot = true;
-      const iterSections = [data.questionPaper];
-
-      for (let i = 0; i < iterSections.length; i++) {
-        const sectionText = iterSections[i];
-        setProgress({ current: i + 1, total: iterSections.length });
-
-        let context: string;
-        if (useSingleShot) {
-          // Send full template context so AI can generate all testers at once
-          context = data.templateStructure;
-        } else {
-          // Get relevant file paths, then look up their full code blocks
-          const relevantPathsStr = getRelevantFiles(sectionText, filePaths);
-          const relevantPaths = relevantPathsStr.split("\n").filter(Boolean);
-          context =
-            relevantPaths.length > 0
-              ? relevantPaths.map((p) => pathToBlock.get(p) || "").filter(Boolean).join("\n\n")
-              : data.templateStructure;
-        }
-
-        const res = await fetch("/api/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            questionPaper: sectionText,
-            templateStructure: context,
-          }),
-        });
-
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.error || `Failed at section ${i + 1}`);
-        }
-
-        const sectionData = await res.json();
-        if (sectionData.files) {
-          sectionData.files.forEach((file: TestFile) => {
-            allFilesMap.set(file.filename, file);
-          });
-        }
-
-        if (i < sections.length - 1) {
-          await new Promise((r) => setTimeout(r, 2000));
-        }
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("Response body is not readable");
       }
 
-      return { files: Array.from(allFilesMap.values()) };
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let fullContent = "";
+      let currentThinking = "";
+      let finalFiles: TestFile[] = [];
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith("data: ")) continue;
+            
+            const dataStr = trimmed.slice(6);
+            if (dataStr === "[DONE]") continue;
+
+            try {
+              const event = JSON.parse(dataStr);
+              if (event.type === "content") {
+                fullContent += event.delta;
+                
+                // Try to extract "thinking" for immediate feedback
+                // Simple regex extraction as the JSON grows
+                const thinkingMatch = fullContent.match(/"thinking":\s*"((?:[^"\\]|\\.)*)"/);
+                if (thinkingMatch && thinkingMatch[1]) {
+                  // Unescape simple JSON strings for the UI
+                  currentThinking = thinkingMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+                  setThinkingText(currentThinking);
+                }
+              }
+            } catch (e) {
+              console.warn("Failed to parse stream chunk:", dataStr);
+            }
+          }
+        }
+
+        // Final parse of the complete JSON object
+        if (fullContent) {
+          console.log("[AI Generate] Raw content before parse:", fullContent);
+          try {
+            const finalParsed = JSON.parse(fullContent);
+            finalFiles = finalParsed.files || [];
+            currentThinking = finalParsed.thinking || currentThinking;
+          } catch (e) {
+            console.error("Failed to parse final JSON content:", e, fullContent);
+            throw new Error("AI returned invalid JSON formatting. Please try again.");
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      if (finalFiles.length === 0) {
+        throw new Error("AI failed to generate any valid test files.");
+      }
+
+      return { files: finalFiles, thinking: currentThinking };
     },
     onSuccess: (data) => {
       setGeneratedFiles(data.files);
       setCurrentStep("review");
+      setThinkingText("");
       setProgress(null);
+      toast.success("AI test generation completed successfully.");
     },
-    onError: () => {
+    onError: (error: any) => {
+      setThinkingText("");
       setProgress(null);
+      console.error("Generation failed:", error);
+      toast.error(error.message || "AI generation failed.");
     },
   });
+
 
   // 2. Direct Upload Mutation (submissions zips + tester .java files + template folder files)
   const directUploadMutation = useMutation({
@@ -157,6 +183,10 @@ export default function DashboardPage() {
     },
     onSuccess: () => {
       setCurrentStep("run");
+      toast.success("Files uploaded successfully.");
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Upload failed.");
     },
   });
 
@@ -172,13 +202,17 @@ export default function DashboardPage() {
       return res.json();
     },
     onSuccess: () => {
-      // Convert generated test files to File objects and redirect to direct upload
+      // Convert generated test files to File objects for the pipeline
       const testerFileObjects = generatedFiles.map(
         (f) => new File([f.code], f.filename, { type: "text/x-java" })
       );
       setPreloadedTesters(testerFileObjects);
       setUploadMode("direct");
-      setCurrentStep("upload");
+      setCurrentStep("run"); // Transition straight to Execution
+      toast.success("Codebase and tests synchronized.");
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to save codebase.");
     },
   });
 
@@ -187,24 +221,55 @@ export default function DashboardPage() {
     mutationFn: async () => {
       const endpoint = uploadMode === "direct" ? "/api/grade" : "/api/run";
       const res = await fetch(endpoint, { method: "POST" });
-      if (!res.ok) throw new Error("Pipeline run failed");
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Pipeline run failed. Please try again.");
+      }
 
       const reader = res.body?.getReader();
       if (!reader) throw new Error("No response body");
 
       setExecutionOutput("");
+      let fullOutput = "";
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         const chunk = new TextDecoder().decode(value);
+        fullOutput += chunk;
         setExecutionOutput((prev) => prev + chunk);
+      }
+
+      // Check the entire output for the exit code with a more flexible regex
+      const exitCodeMatch = fullOutput.match(/\[PROCESS EXITED WITH CODE\s*(\d+)\]/i);
+      const exitCode = exitCodeMatch ? parseInt(exitCodeMatch[1], 10) : 0;
+
+      // Also check specifically for known fatal strings if the exit code is missing or zero
+      const isDockerError = fullOutput.includes("Docker engine is not running") || fullOutput.includes("Cannot connect to the Docker daemon");
+
+      console.log(`[Pipeline] Finished with code: ${exitCode}, dockerError: ${isDockerError}`);
+
+      if (exitCode !== 0 || isDockerError) {
+        setResults(null);
+        let errorMsg = `Pipeline execution failed (Exit Code ${exitCode}). Check terminal for details.`;
+        
+        if (isDockerError) {
+          errorMsg = "Docker engine is offline. Please start Docker Desktop and try again.";
+        } else if (fullOutput.includes("Compilation failed")) {
+          errorMsg = "Java compilation failed. Check the submission files for syntax errors.";
+        }
+        
+        throw new Error(errorMsg);
       }
 
       const resultsRes = await fetch("/api/results");
       if (resultsRes.ok) {
         const data = await resultsRes.json();
         setResults(data);
+        toast.success("Pipeline executed and results captured.");
       }
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Pipeline execution failure.");
     },
   });
 
@@ -265,19 +330,38 @@ export default function DashboardPage() {
         {generateMutation.isPending && (
           <div className="fixed inset-0 bg-background/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center gap-8">
             <Loader2 className="w-16 h-16 text-indigo-500 animate-spin" />
-            <div className="text-center space-y-3">
+            <div className="text-center space-y-3 max-w-lg px-6">
               <h3 className="text-2xl font-black text-foreground font-heading tracking-widest uppercase">
-                {progress
+                {thinkingText ? "Analysing Requirements" : (progress
                   ? `Synthesizing ${progress.current}/${progress.total}`
-                  : "Initializing AI Engine"}
+                  : "Initializing AI Engine")}
               </h3>
+              
+              {thinkingText && (
+                <div className="mt-6 p-6 bg-muted/50 border border-border text-left font-mono text-[11px] leading-relaxed text-indigo-400 dark:text-indigo-300 animate-in fade-in slide-in-from-bottom-2 duration-500 shadow-2xl">
+                  <div className="flex items-center gap-2 mb-3 text-muted-foreground border-b border-border pb-2 uppercase tracking-widest font-black text-[10px]">
+                    <Cpu className="w-3.5 h-3.5" />
+                    Mental Model
+                  </div>
+                  <div className="whitespace-pre-wrap italic">
+                    {thinkingText}
+                  </div>
+                </div>
+              )}
+
               {progress && (
-                <div className="w-64 h-1 bg-muted mt-6 mx-auto">
+                <div className="w-64 h-1 bg-muted mt-8 mx-auto">
                   <div
                     className="h-full bg-indigo-500 transition-all duration-700"
                     style={{ width: `${(progress.current / progress.total) * 100}%` }}
                   />
                 </div>
+              )}
+              
+              {!thinkingText && !progress && (
+                <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] animate-pulse">
+                  Calibrating Neural Weights...
+                </p>
               )}
             </div>
           </div>
@@ -319,19 +403,6 @@ export default function DashboardPage() {
                   }
                 }}
               />
-
-              {(generateMutation.isError || directUploadMutation.isError) && (
-                <Card className="bg-red-500/10 border-red-500/20 border-2 max-w-2xl rounded-none">
-                  <CardHeader>
-                    <CardTitle className="text-red-400 font-black uppercase tracking-widest text-xs">
-                      Error
-                    </CardTitle>
-                    <CardDescription className="text-red-300/70 font-mono text-xs uppercase">
-                      {((generateMutation.error || directUploadMutation.error) as Error)?.message}
-                    </CardDescription>
-                  </CardHeader>
-                </Card>
-              )}
             </div>
           )}
 
@@ -367,22 +438,24 @@ export default function DashboardPage() {
                   isLoading={saveMutation.isPending}
                 />
                 <button
-                  onClick={() => {
+                  onClick={async () => {
+                    const zip = new JSZip();
                     generatedFiles.forEach((file) => {
-                      const blob = new Blob([file.code], { type: "text/x-java" });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement("a");
-                      a.href = url;
-                      a.download = file.filename;
-                      a.click();
-                      URL.revokeObjectURL(url);
+                      zip.file(file.filename, file.code);
                     });
+                    const content = await zip.generateAsync({ type: "blob" });
+                    const url = URL.createObjectURL(content);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = "tester_files.zip";
+                    a.click();
+                    URL.revokeObjectURL(url);
                   }}
                   className="flex items-center justify-center gap-3 py-3 px-6 border-2 border-border bg-card hover:bg-accent hover:border-indigo-500 transition-all rounded-none w-fit mx-auto group"
                 >
                   <Download className="w-4 h-4 text-muted-foreground group-hover:text-indigo-600 dark:group-hover:text-indigo-400" />
                   <span className="text-xs font-black text-muted-foreground group-hover:text-foreground uppercase tracking-widest">
-                    Download All Test Files
+                    Download All Test Files (.ZIP)
                   </span>
                 </button>
               </div>
