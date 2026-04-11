@@ -59,12 +59,12 @@ export function TestReviewer({ files, onSave, isLoading }: TestReviewerProps) {
             <CardHeader className="flex flex-row items-center justify-between py-6 bg-muted/50">
               <div className="flex flex-col gap-1">
                 <CardTitle className="text-2xl font-black flex items-center gap-4 text-indigo-600 dark:text-indigo-400 font-heading tracking-tight">
-                  {file.filename}
+                  {file.filename.split("/").pop() || file.filename}
                   <Badge
                     variant="outline"
                     className="text-[10px] border-indigo-500/40 text-indigo-600/80 dark:text-indigo-400/80 uppercase tracking-[0.2em] font-black px-3"
                   >
-                    {file.questionRef}
+                    {file.questionRef || (file.filename.split("/").pop() || "").replace("Tester.java", "")}
                   </Badge>
                 </CardTitle>
                 <p className="text-sm text-muted-foreground font-medium leading-relaxed max-w-3xl mt-1 italic">

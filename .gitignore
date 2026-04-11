@@ -34,6 +34,9 @@ web-uploads/
 web-work/
 web-results/
 
+# AI-generated tester files (keep the template structure)
+Tester-Files/*.java
+
 # macOS
 .DS_Store
 tmp/

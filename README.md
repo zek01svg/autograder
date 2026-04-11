@@ -1,40 +1,52 @@
 # 🎓 OOP IS442 G3T3 — AutoGrader
 
-A Java-based auto-grader for IS442 student submissions. Runs each test in an isolated Docker container and produces per-question scores and a gradebook-ready CSV. Instructors can interact via the **Next.js dashboard** (recommended) or the **CLI** directly.
+A Java-based auto-grader for IS442 student submissions. Each test runs in an **isolated Docker container**, producing per-question scores and a gradebook-ready CSV. Instructors interact via the **Next.js Dashboard** which supports two modes:
+
+| Mode | Purpose |
+|------|---------|
+| **Direct** | You already have tester files — upload everything and grade immediately |
+| **Generate** | You only have the question paper — AI generates the tester files for you |
 
 ---
 
 ## 🛠 Prerequisites
 
-- **☕ JDK 17+**
-- **🐳 Docker Desktop** (engine must be running)
-- **📦 Node.js 18+** and **pnpm**
-- **🤖 Ollama** — with `qwen2.5-coder:3b` installed
-```bash
-# 1. Install ollama if not yet installed
-# macOS
-curl -fsSL https://ollama.com/install.sh | sh
-# Windows
-irm https://ollama.com/install.ps1 | iex
+| Tool | Why it's needed |
+|------|----------------|
+| **☕ JDK 17+** | Compiles and runs the Java grading engine |
+| **🐳 Docker Desktop** | Runs each student's code in an isolated container |
+| **📦 Node.js 18+** & **pnpm** | Runs the Next.js dashboard |
+| **🤖 Ollama** | Local AI engine for the Generate mode |
 
-# 2. Pull the model
-ollama pull qwen2.5-coder:3b
+### Installing Ollama
+
+```bash
+# macOS
+brew install ollama
+brew services start ollama
+
+# Windows
+winget install Ollama.Ollama
+
+# Linux
+curl -fsSL https://ollama.com/install.sh | sh
 ```
+
+After installing, pull the required model:
+
+```bash
+ollama pull qwen2.5-coder:7b
+```
+
+> 💡 **Note:** Ollama is only required for **Generate mode**. If you are only using **Direct mode** (with your own tester files), you can skip this step.
 
 ---
 
-## 🚀 Option 1: Dashboard (Recommended)
+## 🚀 Quick Start
 
-A web UI with two modes:
-
-- **📤 Direct** — upload student submission zips, tester files folder, and exam template folder. Grade immediately.
-- **🧬 Generate** — upload the question paper (PDF or text) and the template folder and **Ollama** powered by **Qwen2.5-coder:3b** generates Java tester files for you to review, commit, and automatically execute.
-
-### ⏱ Quick Start
-
-```sh
-# 1. Compile the Java grader
-./scripts/compile.sh        # macOS/Linux
+```bash
+# 1. Compile the Java grading engine
+./scripts/compile.sh        # macOS / Linux
 scripts\compile.bat         # Windows
 
 # 2. Install dashboard dependencies
@@ -45,88 +57,171 @@ pnpm install
 pnpm dev
 ```
 
-Then open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-> ⚠️ **IMPORTANT**: Docker must be running before you click **Start Execution** in the dashboard.
-
-### Dashboard workflow (Direct mode)
-
-1. Select student `.zip` files (one per student)
-2. Select the `Tester-Files` folder containing `*Tester.java` files
-3. Select the `RenameToYourUsername` template folder
-4. Click **Upload & Prepare**, then **Start Execution**
-5. View per-question scores, validation status, and download the results CSV
-
-### Dashboard workflow (Generate mode)
-
-1. Paste or upload the question paper (PDF / `.txt` / `.md`)
-2. Select the `RenameToYourUsername` template folder
-3. Click **Start Autograder** — Local AI generates Java tester files incrementally
-4. Review the generated tests in the live editor
-5. Click **Commit All Tests** — Tests are saved to `Tester-Files/` and the app auto-transitions to the execution stage
-6. Click **Download All Test Files (.ZIP)** to bundle the suite for distribution (optional)
-7. View results and download CSV
+> ⚠️ **IMPORTANT:** Docker Desktop must be running before you start grading.
 
 ---
 
+## 📤 Mode 1: Direct (Bring Your Own Tests)
+
+Use this mode when you **already have `*Tester.java` files** written and ready to go.
+
+### What you need to prepare
+
+| Upload slot | What to select | Example |
+|---|---|---|
+| **Submissions** | A folder containing student `.zip` files (one zip per student) | `submissions/alice.zip`, `bob.zip` |
+| **Tester Files** | The folder containing your `*Tester.java` files | `Tester-Files/` → `Q1aTester.java`, `Q2aTester.java`, etc. |
+| **Exam Template** | The `RenameToYourUsername/` folder with `Q1/`, `Q2/`, `Q3/` subfolders — this defines the expected submission structure | `RenameToYourUsername/Q1/Q1a.java`, etc. |
+
+### Step-by-step workflow
+
+1. On the dashboard, make sure **DIRECT** is selected (default)
+2. Click each upload zone to select the corresponding folder
+3. Click **Upload & Prepare** — files are uploaded to the server
+4. Click **Start Execution** — the Java grader runs each submission in Docker
+5. View the **results table** with per-question scores and validation status
+6. Click **Download CSV** to export the gradebook
+
+```mermaid
+flowchart LR
+    A["Select Folders"] --> B["Upload & Prepare"]
+    B --> C["Start Execution"]
+    C --> D["Docker runs tests"]
+    D --> E["View Results & Download CSV"]
+```
+
 ---
 
-## 🚀 Getting Started
+## 🧬 Mode 2: Generate (AI-Assisted Test Creation)
 
-The recommended way to use the AutoGrader is via the **Next.js Dashboard**.
+Use this mode when you **don't have tester files yet** — the local AI model reads your question paper and generates them for you.
 
-### ⏱ Quick Start
+### What you need to prepare
 
-1. **Compile the Java Core**
-   ```bash
-   scripts\compile.bat  # Windows
-   ./scripts/compile.sh # macOS/Linux
-   ```
+| Upload slot | What to select | Example |
+|---|---|---|
+| **Assignment** | The question paper as a PDF, `.txt`, or `.md` file | `IS442_Final_2025.pdf` |
+| **Exam Template** | Same `RenameToYourUsername/` folder as Direct mode | `RenameToYourUsername/Q1/Q1a.java`, etc. |
 
-2. **Start the Dashboard**
-   ```bash
-   cd dashboard
-   pnpm install
-   pnpm dev
-   ```
+### Step-by-step workflow
 
-3. **Open the App**
-   Navigate to [http://localhost:3000](http://localhost:3000).
+1. Switch to **GENERATE** mode using the toggle
+2. Upload or paste your question paper
+3. Select the exam template folder
+4. Click **Generate Tests** — Ollama (Qwen 2.5-coder) generates Java tester files in real time
+5. **Review the generated tests** in the built-in code editor — edit if needed
+6. Click **Commit All Tests** — tests are saved to `Tester-Files/` and the app transitions to execution
+7. The grader runs automatically using the committed tests
+8. View results and download CSV
+9. _(Optional)_ Click **Download All Test Files (.ZIP)** to save the generated test suite
+
+```mermaid
+flowchart LR
+    A["Upload Question Paper"] --> B["Generate Tests"]
+    B --> C["Review & Edit"]
+    C --> D["Commit All Tests"]
+    D --> E["Auto-Execute in Docker"]
+    E --> F["View Results & Download CSV"]
+```
+
+> ⚠️ **Generation time:** Test generation takes approximately **5 minutes** depending on your hardware, as all AI inference runs locally on your machine.
+
+> 💡 **Recommendation:** AI-generated test cases may not perfectly match the exam's mark allocation. It is strongly recommended to **download the generated test files** and **manually review/edit** them before using for final grading. The number of test cases per question may differ from the intended marks.
+
+> 💡 **How it works:** The dashboard sends your question paper and template structure to a locally-running Qwen 2.5-coder model via Ollama. The AI generates `*Tester.java` files that extend the student template classes, each with a `grade()` method that returns a score. All AI inference runs **locally** — nothing is sent to external APIs.
 
 ---
 
-## 📂 Project Organization
+## 📂 Project Structure
 
-- **[dashboard/](dashboard/README.md)** — Next.js web interface for grading and AI test generation.
-- **[src/grader/](src/grader/README.md)** — Core Java grading engine, CLI, and configuration details.
-- **Tester-Files/** — Directory for Java JUnit tester files.
-- **RenameToYourUsername/** — Folder structure for student submissions.
+```
+autograder/
+├── dashboard/               # Next.js web interface
+│   ├── src/app/             #   Pages and API routes
+│   ├── src/components/      #   UI components (UploadZone, TestReviewer, etc.)
+│   └── src/lib/             #   Ollama client, logger, schemas
+├── src/grader/              # Core Java grading engine
+│   ├── Main.java            #   CLI entry point
+│   ├── core/                #   GradingPipeline, Runner, Validator, Grader
+│   ├── model/               #   Data models (GradeResult, ValidationResult)
+│   ├── report/              #   HTML & CSV report generation
+│   └── util/                #   File and CSV utilities
+├── scripts/                 # Build and run scripts (cross-platform)
+├── config.properties        # Grading engine configuration
+├── Tester-Files/            # Java tester files (generated or manual)
+├── RenameToYourUsername/     # Exam template folder structure
+├── results/                 # Output: results.csv and report.html
+└── web-uploads/             # Temp storage for dashboard uploads
+```
 
 ---
 
 ## ⚙️ Configuration
 
-System-wide limits (threads, memory, timeouts) are managed in:
-👉 **[config.properties](config.properties)**
+Grading engine limits are controlled via [`config.properties`](config.properties):
 
-*Detailed configuration documentation can be found in the [Grader README](src/grader/README.md#configuration-configproperties).*
+| Key | Description | Default |
+|-----|-------------|---------|
+| `runner.threads` | Max concurrent Docker containers | `10` |
+| `runner.memory` | Memory limit per container | `256m` |
+| `runner.cpus` | CPU limit per container | `0.5` |
+| `runner.timeout_seconds` | Max execution time per student (seconds) | `15` |
+| `dir.testers` | Tester files directory | `Tester-Files` |
+| `dir.work` | Temp working directory for extractions | `work` |
 
 ---
 
 ## 🏗 System Overview
 
-Below is a simplified view of the grading pipeline:
-
 ```mermaid
-flowchart LR
-    A[Submissions] --> B[Validator]
-    B --> C[Grading Engine]
-    C --> D[Docker Runner]
-    D --> E[Results CSV/HTML]
-    F[Ollama AI] -.-> G[Java Testers]
-    G -.-> C
+flowchart TD
+    subgraph UI ["Next.js Dashboard"]
+        Direct["Direct Mode"]
+        Generate["Generate Mode"]
+    end
+
+    subgraph AI ["Local AI"]
+        Ollama["Ollama\n(qwen2.5-coder:7b)"]
+    end
+
+    subgraph Engine ["Java Grading Engine"]
+        Validator["Validator"]
+        Pipeline["GradingPipeline"]
+        Docker["Docker Containers"]
+    end
+
+    subgraph Output ["Results"]
+        CSV["results.csv"]
+        HTML["report.html"]
+    end
+
+    Direct -- "Upload files" --> Pipeline
+    Generate -- "Question paper" --> Ollama
+    Ollama -- "Generated tests" --> Generate
+    Generate -- "Commit tests" --> Pipeline
+    Pipeline --> Validator --> Docker
+    Docker --> CSV
+    Docker --> HTML
 ```
 
-For the execution engine documentation, see the **[Technical Documentation](src/grader/README.md#system-architecture)**.
+---
 
-For the UI documentation, see the **[UI Documentation](dashboard/README.md)**.
+## 🔧 Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| `Module not found: sonner` | Run `pnpm add sonner` in the `dashboard/` directory |
+| Docker errors during grading | Ensure Docker Desktop is running (`docker info` to verify) |
+| Ollama connection refused | Start the service: `brew services start ollama` (macOS) or `ollama serve` (manual) |
+| Model not found | Run `ollama pull qwen2.5-coder:7b` |
+| Java compilation fails | Ensure JDK 17+ is installed: `java -version` |
+| Port 3000 already in use | Kill the process: `lsof -ti:3000 \| xargs kill` or use `pnpm dev -- -p 3001` |
+
+---
+
+## 📖 Further Documentation
+
+- **[Dashboard README](dashboard/README.md)** — API routes, architecture diagram, and component details
+- **[Grader README](src/grader/README.md)** — CLI usage, class diagram, and execution flow

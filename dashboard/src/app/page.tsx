@@ -38,9 +38,14 @@ export default function DashboardPage() {
   } | null>(null);
   const [uploadMode, setUploadMode] = useState<"ai" | "direct">("ai");
   const [preloadedTesters, setPreloadedTesters] = useState<File[]>([]);
+  const [preloadedTemplates, setPreloadedTemplates] = useState<File[]>([]);
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [thinkingText, setThinkingText] = useState<string>("");
+  const [generationStatus, setGenerationStatus] = useState<string>("Initializing AI Engine");
+  const [filesDetected, setFilesDetected] = useState<number>(0);
+  const [generationStartTime, setGenerationStartTime] = useState<number | null>(null);
+  const [elapsedTime, setElapsedTime] = useState<number>(0);
 
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
@@ -54,10 +59,23 @@ export default function DashboardPage() {
     }
   }, [executionOutput]);
 
+  // Elapsed time ticker
+  useEffect(() => {
+    if (!generationStartTime) return;
+    const interval = setInterval(() => {
+      setElapsedTime(Math.floor((Date.now() - generationStartTime) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [generationStartTime]);
+
   // 1. Generate Mutation
   const generateMutation = useMutation({
     mutationFn: async (data: { questionPaper: string; templateStructure: string }) => {
       setThinkingText("Initializing local AI...");
+      setGenerationStatus("Connecting to Ollama");
+      setFilesDetected(0);
+      setGenerationStartTime(Date.now());
+      setElapsedTime(0);
       
       const response = await fetch("/api/generate", {
         method: "POST",
@@ -84,6 +102,7 @@ export default function DashboardPage() {
       let fullContent = "";
       let currentThinking = "";
       let finalFiles: TestFile[] = [];
+      let fixedFiles: TestFile[] | null = null;
 
       try {
         while (true) {
@@ -107,13 +126,32 @@ export default function DashboardPage() {
                 fullContent += event.delta;
                 
                 // Try to extract "thinking" for immediate feedback
-                // Simple regex extraction as the JSON grows
                 const thinkingMatch = fullContent.match(/"thinking":\s*"((?:[^"\\]|\\.)*)"/);
                 if (thinkingMatch && thinkingMatch[1]) {
-                  // Unescape simple JSON strings for the UI
                   currentThinking = thinkingMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
                   setThinkingText(currentThinking);
+                  setGenerationStatus("Analysing requirements");
                 }
+
+                // Track file generation progress by counting completed "filename" entries
+                const fileMatches = fullContent.match(/"filename"\s*:\s*"[^"]+"/g);
+                const detectedCount = fileMatches ? fileMatches.length : 0;
+                if (detectedCount > filesDetected) {
+                  setFilesDetected(detectedCount);
+                  const lastFile = fileMatches![fileMatches!.length - 1].match(/"([^"]+)"\s*$/)?.[1] || "";
+                  setGenerationStatus(`Generating ${lastFile}`);
+                }
+
+                // Detect when code blocks are being written
+                if (fullContent.includes('"code"') && detectedCount > 0) {
+                  const codeMatches = fullContent.match(/"code"\s*:\s*"/g);
+                  if (codeMatches && codeMatches.length > (fileMatches?.length || 0) - 1) {
+                    setGenerationStatus(`Writing test cases (${detectedCount} of ~5 files)`);
+                  }
+                }
+              } else if (event.type === "fixed_files" && event.files) {
+                // Post-processed files from the server with flat filenames and expanded code
+                fixedFiles = event.files;
               }
             } catch (e) {
               console.warn("Failed to parse stream chunk:", dataStr);
@@ -123,13 +161,13 @@ export default function DashboardPage() {
 
         // Final parse of the complete JSON object
         if (fullContent) {
-          console.log("[AI Generate] Raw content before parse:", fullContent);
+          console.log("[AI Generate] Raw content length:", fullContent.length);
           try {
             const finalParsed = JSON.parse(fullContent);
             finalFiles = finalParsed.files || [];
             currentThinking = finalParsed.thinking || currentThinking;
           } catch (e) {
-            console.error("Failed to parse final JSON content:", e, fullContent);
+            console.error("Failed to parse final JSON content:", e);
             throw new Error("AI returned invalid JSON formatting. Please try again.");
           }
         }
@@ -137,22 +175,35 @@ export default function DashboardPage() {
         reader.releaseLock();
       }
 
-      if (finalFiles.length === 0) {
+      // Prefer the server-side post-processed files (flat filenames, expanded code)
+      const resultFiles = (fixedFiles || finalFiles).map((f: any) => {
+        // Ensure flat filename
+        const basename = (f.filename || "").split("/").pop() || f.filename;
+        // Derive questionRef from filename if not present (e.g., Q1aTester.java -> Q1a)
+        const questionRef = f.questionRef || basename.replace("Tester.java", "");
+        return { ...f, filename: basename, questionRef, explanation: f.explanation || "" };
+      });
+
+      if (resultFiles.length === 0) {
         throw new Error("AI failed to generate any valid test files.");
       }
 
-      return { files: finalFiles, thinking: currentThinking };
+      return { files: resultFiles as TestFile[], thinking: currentThinking };
     },
     onSuccess: (data) => {
       setGeneratedFiles(data.files);
       setCurrentStep("review");
       setThinkingText("");
       setProgress(null);
+      setGenerationStartTime(null);
+      setGenerationStatus("");
       toast.success("AI test generation completed successfully.");
     },
     onError: (error: any) => {
       setThinkingText("");
       setProgress(null);
+      setGenerationStartTime(null);
+      setGenerationStatus("");
       console.error("Generation failed:", error);
       toast.error(error.message || "AI generation failed.");
     },
@@ -203,13 +254,17 @@ export default function DashboardPage() {
     },
     onSuccess: () => {
       // Convert generated test files to File objects for the pipeline
+      // Use flat basenames so the upload route places them correctly in web-uploads/testers/
       const testerFileObjects = generatedFiles.map(
-        (f) => new File([f.code], f.filename, { type: "text/x-java" })
+        (f) => {
+          const basename = f.filename.split("/").pop() || f.filename;
+          return new File([f.code], basename, { type: "text/x-java" });
+        }
       );
       setPreloadedTesters(testerFileObjects);
       setUploadMode("direct");
-      setCurrentStep("run"); // Transition straight to Execution
-      toast.success("Codebase and tests synchronized.");
+      setCurrentStep("upload"); // Transition back to Upload to get submissions
+      toast.success("Tests saved. Please upload student submissions.");
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to save codebase.");
@@ -326,46 +381,50 @@ export default function DashboardPage() {
       </header>
 
       <div className="max-w-6xl mx-auto space-y-16 p-6 md:p-12">
-        {/* Global Pending State Overlay */}
-        {generateMutation.isPending && (
-          <div className="fixed inset-0 bg-background/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center gap-8">
-            <Loader2 className="w-16 h-16 text-indigo-500 animate-spin" />
-            <div className="text-center space-y-3 max-w-lg px-6">
-              <h3 className="text-2xl font-black text-foreground font-heading tracking-widest uppercase">
-                {thinkingText ? "Analysing Requirements" : (progress
-                  ? `Synthesizing ${progress.current}/${progress.total}`
-                  : "Initializing AI Engine")}
-              </h3>
-              
-              {thinkingText && (
-                <div className="mt-6 p-6 bg-muted/50 border border-border text-left font-mono text-[11px] leading-relaxed text-indigo-400 dark:text-indigo-300 animate-in fade-in slide-in-from-bottom-2 duration-500 shadow-2xl">
-                  <div className="flex items-center gap-2 mb-3 text-muted-foreground border-b border-border pb-2 uppercase tracking-widest font-black text-[10px]">
-                    <Cpu className="w-3.5 h-3.5" />
-                    Mental Model
-                  </div>
-                  <div className="whitespace-pre-wrap italic">
-                    {thinkingText}
-                  </div>
-                </div>
-              )}
+        {generateMutation.isPending && (() => {
+          const estimatedTotal = 5;
+          const progressPct = Math.min((filesDetected / estimatedTotal) * 100, 95);
 
-              {progress && (
-                <div className="w-64 h-1 bg-muted mt-8 mx-auto">
+          return (
+          <div className="fixed inset-0 bg-background/95 backdrop-blur-md z-50 flex items-center justify-center">
+            <div className="max-w-md w-full px-8 space-y-8">
+              {/* Header */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em]">
+                    {generationStatus}
+                  </span>
+                </div>
+                {/* Progress bar */}
+                <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-indigo-500 transition-all duration-700"
-                    style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                    className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all duration-1000 ease-out rounded-full"
+                    style={{ width: `${Math.max(progressPct, filesDetected > 0 ? 10 : 3)}%` }}
                   />
                 </div>
-              )}
-              
-              {!thinkingText && !progress && (
-                <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] animate-pulse">
-                  Calibrating Neural Weights...
-                </p>
+                <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
+                  <span>{filesDetected} / ~{estimatedTotal} files</span>
+                  <span>~5 min</span>
+                </div>
+              </div>
+
+              {/* AI Thinking — the showcase */}
+              {thinkingText && (
+                <div className="p-5 bg-card border border-border rounded-lg shadow-lg animate-in fade-in slide-in-from-bottom-3 duration-500">
+                  <div className="flex items-center gap-2 mb-3 text-indigo-600 dark:text-indigo-400">
+                    <Cpu className="w-4 h-4" />
+                    <span className="text-xs font-black uppercase tracking-widest">AI Reasoning</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground leading-relaxed italic">
+                    {thinkingText}
+                  </p>
+                </div>
               )}
             </div>
           </div>
-        )}
+          );
+        })()}
 
         <main className="min-h-[40vh]">
           {/* 1. Upload Step */}
@@ -381,9 +440,13 @@ export default function DashboardPage() {
               </div>
               <UploadZone
                 preloadedTesterFiles={preloadedTesters}
+                preloadedTemplateFiles={preloadedTemplates}
                 onFilesSelected={(data) => {
                   if (data.mode === "generate" && data.questionPaper) {
                     setUploadMode("ai");
+                    if (data.templateFiles) {
+                      setPreloadedTemplates(data.templateFiles);
+                    }
                     generateMutation.mutate({
                       questionPaper: data.questionPaper,
                       templateStructure: data.templateStructure!,
@@ -425,18 +488,11 @@ export default function DashboardPage() {
                   </div>
                 )}
               </div>
-              <div className="bg-amber-500/10 border border-amber-500/30 p-4 rounded-none">
-                <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+              <div className="bg-amber-500/10 border border-amber-500/30 p-4 rounded-none flex flex-col sm:flex-row sm:items-center gap-4">
+                <p className="text-xs text-amber-700 dark:text-amber-400 font-medium flex-1">
                   <span className="font-black uppercase tracking-wider">⚠ Disclaimer:</span>{" "}
-                  AI-generated test files may not always be accurate. Please review and amend the test cases before using them for final grading. Test inputs, expected outputs, and edge cases should be verified against the exam requirements.
+                  AI-generated test files may not always be accurate. The number of test cases generated per question may be more or fewer than the actual mark allocation in the exam paper. Faculty should review and manually edit the tester files to ensure correctness before using them for final grading.
                 </p>
-              </div>
-              <div className="flex flex-col gap-10">
-                <TestReviewer
-                  files={generatedFiles}
-                  onSave={() => saveMutation.mutate(generatedFiles)}
-                  isLoading={saveMutation.isPending}
-                />
                 <button
                   onClick={async () => {
                     const zip = new JSZip();
@@ -451,13 +507,20 @@ export default function DashboardPage() {
                     a.click();
                     URL.revokeObjectURL(url);
                   }}
-                  className="flex items-center justify-center gap-3 py-3 px-6 border-2 border-border bg-card hover:bg-accent hover:border-indigo-500 transition-all rounded-none w-fit mx-auto group"
+                  className="flex items-center justify-center gap-2 py-2.5 px-5 border-2 border-amber-500/30 bg-card hover:bg-amber-500/10 hover:border-amber-500 transition-all rounded-none whitespace-nowrap shrink-0 group"
                 >
-                  <Download className="w-4 h-4 text-muted-foreground group-hover:text-indigo-600 dark:group-hover:text-indigo-400" />
-                  <span className="text-xs font-black text-muted-foreground group-hover:text-foreground uppercase tracking-widest">
-                    Download All Test Files (.ZIP)
+                  <Download className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                  <span className="text-xs font-black text-amber-700 dark:text-amber-400 uppercase tracking-widest">
+                    Download Files
                   </span>
                 </button>
+              </div>
+              <div className="flex flex-col gap-10">
+                <TestReviewer
+                  files={generatedFiles}
+                  onSave={() => saveMutation.mutate(generatedFiles)}
+                  isLoading={saveMutation.isPending}
+                />
               </div>
             </div>
           )}

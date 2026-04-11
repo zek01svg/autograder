@@ -17,9 +17,10 @@ interface UploadZoneProps {
     templateFiles?: File[];
   }) => void;
   preloadedTesterFiles?: File[];
+  preloadedTemplateFiles?: File[];
 }
 
-export function UploadZone({ onFilesSelected, preloadedTesterFiles }: UploadZoneProps) {
+export function UploadZone({ onFilesSelected, preloadedTesterFiles, preloadedTemplateFiles }: UploadZoneProps) {
   const [mode, setMode] = useState<"generate" | "direct">("direct");
   const [questionPaper, setQuestionPaper] = useState("");
   const [paperFile, setPaperFile] = useState<File | null>(null);
@@ -38,6 +39,13 @@ export function UploadZone({ onFilesSelected, preloadedTesterFiles }: UploadZone
       setMode("direct");
     }
   }, [preloadedTesterFiles]);
+
+  // Pre-populate template files from AI generation flow
+  useEffect(() => {
+    if (preloadedTemplateFiles && preloadedTemplateFiles.length > 0) {
+      setDirectTemplateFiles(preloadedTemplateFiles);
+    }
+  }, [preloadedTemplateFiles]);
 
   useEffect(() => {
     const initPdf = async () => {
@@ -120,7 +128,12 @@ export function UploadZone({ onFilesSelected, preloadedTesterFiles }: UploadZone
         })
       );
       const folderStructure = (entries.filter(Boolean) as string[]).join("\n\n");
-      onFilesSelected({ mode: "generate", questionPaper, templateStructure: folderStructure });
+      onFilesSelected({ 
+        mode: "generate", 
+        questionPaper, 
+        templateStructure: folderStructure,
+        templateFiles: Array.from(templateFiles) 
+      });
     } finally {
       setIsLoading(false);
     }

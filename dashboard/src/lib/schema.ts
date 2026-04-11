@@ -1,15 +1,16 @@
 import { z } from "zod";
 
 export const TestFileSchema = z.object({
-  filename: z.string().describe("The name of the Java file, e.g., 'GradeTest.java'"),
+  filename: z.string().describe("The name of the Java file, e.g., 'Q1aTester.java'"),
   code: z
     .string()
     .describe(
-      "The complete Java code for the JUnit test file. CRITICAL: Use REAL newline characters (\\n) and indent using 4 spaces. DO NOT MINIFY.",
+      "The complete Java code for the tester file. CRITICAL: Use REAL newline characters (\\n) and indent using 4 spaces. DO NOT MINIFY.",
     ),
-  explanation: z.string().describe("A brief explanation of what this test case covers."),
+  explanation: z.string().optional().describe("A brief explanation of what this test case covers."),
   questionRef: z
     .string()
+    .optional()
     .describe("The specific question number or reference from the question paper (e.g., 'Q1a')"),
 });
 
