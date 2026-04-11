@@ -103,6 +103,8 @@ public class Reporter {
     html.append(".score { font-weight: 800; color: var(--primary); }\n");
     html.append(
         ".theme-toggle { background: var(--card-bg); border: 1px solid var(--border); padding: 0.6rem 1.2rem; border-radius: 0.75rem; cursor: pointer; color: var(--text); font-weight: 600; }\n");
+    html.append(".q-error { color: var(--danger); font-size: 0.75rem; display: block; margin-top: 0.25rem; font-weight: 400; max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: help; }\n");
+    html.append(".q-error:hover { white-space: normal; overflow: visible; position: absolute; background: var(--text); color: var(--bg); padding: 0.5rem; border-radius: 0.5rem; z-index: 10; max-width: 250px; }\n");
     html.append("</style>\n</head>\n<body>\n");
 
     html.append("<div class='container'>\n<header>\n<h1>AutoGrader</h1>\n");
@@ -173,7 +175,14 @@ public class Reporter {
       html.append("</td>\n");
 
       for (String q : questionKeys) {
-        html.append("<td>").append(gr.getQuestionScore(q)).append("</td>\n");
+        double qScore = gr.getQuestionScore(q);
+        String qFeedback = gr.getQuestionFeedback(q);
+        html.append("<td>").append(qScore);
+        if (qScore == 0.0 && qFeedback != null) {
+          html.append("<span class='q-error' title='").append(qFeedback.replace("'", "&apos;"))
+              .append("'>⚠️ ").append(qFeedback).append("</span>");
+        }
+        html.append("</td>\n");
       }
       html.append("<td class='score'>").append(gr.getTotalScore()).append("</td>\n");
       html.append("</tr>\n");

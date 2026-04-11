@@ -1,21 +1,15 @@
 package grader.core;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
-import java.util.UUID;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 
 import grader.model.*;
 import grader.report.*;
@@ -33,6 +27,7 @@ public class GradingPipeline {
   private final String workDir;
   private final String templateDir;
   private final Properties config;
+  private final Map<String, File> resolvedTesters = new HashMap<>();
 
   public GradingPipeline(String submissionsDir, String testersDir, String scoresheetPath,
       String outputPath, String workDir, String templateDir, Properties config) {
@@ -209,17 +204,13 @@ public class GradingPipeline {
   }
 
   private String[][] discoverTestCasesFromTemplateAndTesters() {
-    java.util.Map<String, String> testerKeyByLower = new java.util.HashMap<>();
-    java.util.Set<String> testerKeys = new java.util.HashSet<>();
-    File testersRoot = new File(testersDir);
-    File[] testerFiles = testersRoot.listFiles((dir, name) -> name.endsWith("Tester.java"));
-    if (testerFiles != null) {
-      for (File f : testerFiles) {
-        String name = f.getName();
-        String key = name.substring(0, name.length() - "Tester.java".length());
-        testerKeys.add(key);
-        testerKeyByLower.putIfAbsent(key.toLowerCase(), key);
-      }
+    Map<String, String> testerKeyByLower = new HashMap<>();
+    resolvedTesters.clear();
+    
+    findTestersRecursive(new File(testersDir));
+    
+    for (String key : resolvedTesters.keySet()) {
+      testerKeyByLower.put(key.toLowerCase(), key);
     }
 
     java.util.List<String[]> list = new ArrayList<>();
@@ -254,9 +245,9 @@ public class GradingPipeline {
     }
 
     // Fallback: derive from tester names if template matching yields nothing
-    if (!testerKeys.isEmpty()) {
+    if (!resolvedTesters.isEmpty()) {
       java.util.List<String[]> fallback = new ArrayList<>();
-      for (String key : testerKeys) {
+      for (String key : resolvedTesters.keySet()) {
         java.util.regex.Matcher m = java.util.regex.Pattern
             .compile("^Q(\\d+)", java.util.regex.Pattern.CASE_INSENSITIVE)
             .matcher(key);
@@ -272,6 +263,23 @@ public class GradingPipeline {
     }
 
     return new String[0][0];
+  }
+
+  private void findTestersRecursive(File dir) {
+    if (dir == null || !dir.exists() || !dir.isDirectory())
+      return;
+    File[] children = dir.listFiles();
+    if (children == null)
+      return;
+    for (File child : children) {
+      if (child.isDirectory()) {
+        findTestersRecursive(child);
+      } else if (child.getName().endsWith("Tester.java")) {
+        String name = child.getName();
+        String key = name.substring(0, name.length() - "Tester.java".length());
+        resolvedTesters.putIfAbsent(key, child);
+      }
+    }
   }
 
   private String[][] parseTestCases(String raw) {
@@ -324,9 +332,16 @@ public class GradingPipeline {
         String folder = tc[0];
         String questionKey = tc[1];
         String testerName = questionKey + "Tester";
+        File testerFile = resolvedTesters.get(questionKey);
+
+        if (testerFile == null) {
+          result.setQuestionScore(questionKey, 0.0);
+          result.addAnomaly("Tester Lookup: Could not find resolved file for " + testerName);
+          continue;
+        }
 
         Path submissionPath = submissionRoot.toPath().resolve(folder);
-        Path testerSource = Path.of(testersDir, testerName + ".java");
+        Path testerSource = testerFile.toPath();
         Path testerTarget = submissionPath.resolve(testerName + ".java");
 
         try {
@@ -347,7 +362,15 @@ public class GradingPipeline {
           if (runResult.timedOut) {
             result.addAnomaly("Timeout: " + questionKey);
           }
-          result.setQuestionScore(questionKey, grader.parseScoreFromOutput(runResult.output));
+
+          double score = grader.parseScoreFromOutput(runResult.output);
+          result.setQuestionScore(questionKey, score);
+          if (score == 0.0) {
+            String error = grader.identifyErrorSummary(runResult.output);
+            if (error != null) {
+              result.setQuestionFeedback(questionKey, error);
+            }
+          }
         } catch (IOException e) {
           result.setQuestionScore(questionKey, 0.0);
           result.addAnomaly("Tester Setup: Failed to copy " + testerName);

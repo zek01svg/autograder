@@ -14,12 +14,14 @@ public class GradeResult {
   private String studentId;
   private boolean compiled;
   private Map<String, Double> questionScores;
+  private Map<String, String> questionFeedbacks;
   private List<String> anomalies;
 
   public GradeResult(String studentId, boolean compiled) {
     this.studentId = studentId;
     this.compiled = compiled;
     this.questionScores = new HashMap<>();
+    this.questionFeedbacks = new HashMap<>();
     this.anomalies = new ArrayList<>();
   }
 
@@ -58,6 +60,20 @@ public class GradeResult {
    */
   public double getQuestionScore(String question) {
     return questionScores.getOrDefault(question, 0.0);
+  }
+
+  /**
+   * Set specific feedback for a question (e.g. error message).
+   */
+  public void setQuestionFeedback(String question, String feedback) {
+    questionFeedbacks.put(question, feedback);
+  }
+
+  /**
+   * Get feedback for a specific question.
+   */
+  public String getQuestionFeedback(String question) {
+    return questionFeedbacks.get(question);
   }
 
   /**

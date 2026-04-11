@@ -60,5 +60,31 @@ public class Grader {
     }
     return 0.0;
   }
+
+  /**
+   * Identifies an error reason if the score is zero.
+   */
+  public String identifyErrorSummary(String output) {
+    if (output == null || output.trim().isEmpty()) {
+      return "No output produced (possible infinite loop or crash).";
+    }
+    if (output.contains("error: ") && output.contains("javac")) {
+      return "Compilation failed (check student syntax).";
+    }
+    if (output.contains("error: ") || output.contains("Exception in thread")) {
+      // Extract the first hint of the error
+      String[] lines = output.split("\n");
+      for (String line : lines) {
+        if (line.contains("error:") || line.contains("Exception")) {
+          return line.trim();
+        }
+      }
+      return "Runtime exception occurred.";
+    }
+    if (output.contains("Could not find or load main class")) {
+      return "Main class not found (compilation likely failed).";
+    }
+    return null;
+  }
 }
 

@@ -6,7 +6,12 @@ function parseReportHtml(html: string): {
   questionColumns: string[];
   studentMap: Map<
     string,
-    { questionScores: Record<string, number>; validationStatus: string; errors: string[] }
+    { 
+      questionScores: Record<string, number>; 
+      questionErrors: Record<string, string>;
+      validationStatus: string; 
+      errors: string[];
+    }
   >;
 } {
   // Extract question column headers (everything between Validation Status and Total)
@@ -26,7 +31,12 @@ function parseReportHtml(html: string): {
   // Parse each student row
   const studentMap = new Map<
     string,
-    { questionScores: Record<string, number>; validationStatus: string; errors: string[] }
+    { 
+      questionScores: Record<string, number>; 
+      questionErrors: Record<string, string>;
+      validationStatus: string; 
+      errors: string[];
+    }
   >();
   const rowRegex = /<tr>([\s\S]*?)<\/tr>/g;
   let rowMatch;
@@ -58,14 +68,24 @@ function parseReportHtml(html: string): {
       errors.push(...bullets);
     }
 
-    // Remaining tds: per-question scores (skip last which is total)
     const scoreTds = tdMatches.slice(2, tdMatches.length - 1);
     const questionScores: Record<string, number> = {};
+    const questionErrors: Record<string, string> = {};
+    
     for (let i = 0; i < scoreTds.length && i < questionColumns.length; i++) {
-      questionScores[questionColumns[i]] = parseFloat(scoreTds[i][1].trim());
+      const cellHtml = scoreTds[i][1].trim();
+      // Extract numeric score
+      const scoreMatch = cellHtml.match(/^([\d.]+)/);
+      questionScores[questionColumns[i]] = scoreMatch ? parseFloat(scoreMatch[1]) : 0.0;
+      
+      // Extract q-error title if present
+      const errorMatch = cellHtml.match(/class='q-error' title='([\s\S]*?)'/);
+      if (errorMatch) {
+        questionErrors[questionColumns[i]] = errorMatch[1].replace(/&apos;/g, "'");
+      }
     }
 
-    studentMap.set(username, { questionScores, validationStatus, errors });
+    studentMap.set(username, { questionScores, questionErrors, validationStatus, errors });
   }
 
   return { questionColumns, studentMap };
@@ -111,6 +131,7 @@ export async function GET() {
           validationStatus: htmlData?.validationStatus ?? null,
           errors: htmlData?.errors ?? [],
           questionScores: htmlData?.questionScores ?? {},
+          questionErrors: htmlData?.questionErrors ?? {},
         };
       })
       .filter(Boolean);

@@ -700,16 +700,30 @@ export default function DashboardPage() {
                                     <span className="text-muted-foreground text-xs">—</span>
                                   )}
                                 </td>
-                                {results.questionColumns.map((col) => (
-                                  <td
-                                    key={col}
-                                    className="px-6 py-4 text-right text-sm text-foreground"
-                                  >
-                                    {s.questionScores[col] !== undefined
-                                      ? s.questionScores[col].toFixed(1)
-                                      : "—"}
-                                  </td>
-                                ))}
+                                {results.questionColumns.map((col) => {
+                                  const qScore = s.questionScores[col];
+                                  const qError = s.questionErrors?.[col];
+                                  return (
+                                    <td
+                                      key={col}
+                                      className="px-6 py-4 text-right text-sm text-foreground"
+                                    >
+                                      <div className="flex items-center justify-end gap-2">
+                                        {qScore !== undefined ? qScore.toFixed(1) : "—"}
+                                        {qError && (
+                                          <div className="relative group/qerr inline-block">
+                                            <span className="text-red-500 cursor-help text-xs animate-pulse">
+                                              ⚠️
+                                            </span>
+                                            <div className="absolute right-0 bottom-full mb-2 hidden group-hover/qerr:block z-50 w-64 bg-popover text-popover-foreground text-[10px] rounded-lg shadow-xl p-3 border border-border leading-relaxed font-mono whitespace-pre-wrap">
+                                              {qError}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </td>
+                                  );
+                                })}
                                 <td className="px-6 py-4 text-right font-black text-indigo-600 dark:text-indigo-400 text-sm">
                                   {s.score.toFixed(1)}
                                 </td>
