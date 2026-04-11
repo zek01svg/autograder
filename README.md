@@ -20,23 +20,31 @@ A Java-based auto-grader for IS442 student submissions. Each test runs in an **i
 
 ### Installing Ollama
 
+**macOS:**
 ```bash
-# macOS
 brew install ollama
 brew services start ollama
-
-# Windows
-winget install Ollama.Ollama
-
-# Linux
-curl -fsSL https://ollama.com/install.sh | sh
 ```
 
-After installing, pull the required model:
+**Windows:**
+```bash
+winget install Ollama.Ollama
+```
+After installation, **launch the Ollama app** from the Start Menu (it runs as a system tray icon and starts the server automatically on `http://localhost:11434`).
+
+**Linux:**
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+sudo systemctl start ollama
+```
+
+After Ollama is running, pull the required model:
 
 ```bash
 ollama pull qwen2.5-coder:7b
 ```
+
+> To verify Ollama is running: open `http://localhost:11434` in your browser — you should see `"Ollama is running"`.
 
 > 💡 **Note:** Ollama is only required for **Generate mode**. If you are only using **Direct mode** (with your own tester files), you can skip this step.
 
@@ -44,22 +52,41 @@ ollama pull qwen2.5-coder:7b
 
 ## 🚀 Quick Start
 
-```bash
-# 1. Compile the Java grading engine
-./scripts/compile.sh        # macOS / Linux
-scripts\compile.bat         # Windows
+### 1. Compile the Java grading engine
 
-# 2. Install dashboard dependencies
+```bash
+# macOS / Linux
+./scripts/compile.sh
+
+# Windows (Command Prompt)
+scripts\compile.bat
+```
+
+### 2. Install dashboard dependencies
+
+```bash
 cd dashboard
 pnpm install
+```
 
-# 3. Start the dashboard
+> 💡 **Don't have pnpm?** Install it first: `npm install -g pnpm`
+
+### 3. Ensure required services are running
+
+| Service | How to start |
+|---------|-------------|
+| **Docker Desktop** | Open Docker Desktop from your Applications (macOS) or Start Menu (Windows) |
+| **Ollama** _(Generate mode only)_ | **macOS:** `brew services start ollama` · **Windows:** Launch the Ollama app from Start Menu · **Linux:** `sudo systemctl start ollama` |
+
+### 4. Start the dashboard
+
+```bash
 pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-> ⚠️ **IMPORTANT:** Docker Desktop must be running before you start grading.
+> ⚠️ **IMPORTANT:** Docker Desktop must be running before you start grading. Ollama must be running if you want to use Generate mode.
 
 ---
 
@@ -214,10 +241,11 @@ flowchart TD
 |---------|----------|
 | `Module not found: sonner` | Run `pnpm add sonner` in the `dashboard/` directory |
 | Docker errors during grading | Ensure Docker Desktop is running (`docker info` to verify) |
-| Ollama connection refused | Start the service: `brew services start ollama` (macOS) or `ollama serve` (manual) |
+| Ollama connection refused | **macOS:** `brew services start ollama` · **Windows:** Launch the Ollama app from the Start Menu (system tray) · **Linux:** `sudo systemctl start ollama` · **Manual (any OS):** `ollama serve` |
 | Model not found | Run `ollama pull qwen2.5-coder:7b` |
 | Java compilation fails | Ensure JDK 17+ is installed: `java -version` |
-| Port 3000 already in use | Kill the process: `lsof -ti:3000 \| xargs kill` or use `pnpm dev -- -p 3001` |
+| `pnpm: command not found` | Install pnpm: `npm install -g pnpm` |
+| Port 3000 already in use | **macOS/Linux:** `lsof -ti:3000 \| xargs kill` · **Windows:** `netstat -ano \| findstr :3000` then `taskkill /PID <pid> /F` |
 
 ---
 
