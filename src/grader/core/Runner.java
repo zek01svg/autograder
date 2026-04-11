@@ -72,6 +72,44 @@ public class Runner {
   }
 
   /**
+   * Ensures the required Docker image is available locally.
+   * If not present, pulls it (this can take minutes on first run).
+   * This prevents per-container timeouts when the image hasn't been downloaded yet.
+   */
+  public boolean ensureImageAvailable(String imageName) {
+    try {
+      // Check if image exists locally
+      Process check = new ProcessBuilder("docker", "image", "inspect", imageName)
+          .redirectErrorStream(true).start();
+      check.waitFor(10, TimeUnit.SECONDS);
+      if (check.exitValue() == 0) {
+        System.out.println("Docker image '" + imageName + "' is already available.");
+        return true;
+      }
+
+      // Image not found — pull it
+      System.out.println("Docker image '" + imageName + "' not found locally. Pulling (this may take a few minutes)...");
+      Process pull = new ProcessBuilder("docker", "pull", imageName)
+          .inheritIO().start();
+      boolean finished = pull.waitFor(300, TimeUnit.SECONDS); // 5 min timeout for pull
+      if (!finished) {
+        pull.destroyForcibly();
+        System.err.println("Docker pull timed out after 5 minutes.");
+        return false;
+      }
+      if (pull.exitValue() != 0) {
+        System.err.println("Docker pull failed with exit code: " + pull.exitValue());
+        return false;
+      }
+      System.out.println("Docker image '" + imageName + "' pulled successfully.");
+      return true;
+    } catch (Exception e) {
+      System.err.println("Failed to check/pull Docker image: " + e.getMessage());
+      return false;
+    }
+  }
+
+  /**
    * Concurrently compiles and runs a list of submission directories.
    */
   public List<RunOutput> compileAndRunAll(List<String> submissionPaths) {

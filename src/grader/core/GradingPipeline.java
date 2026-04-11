@@ -48,6 +48,17 @@ public class GradingPipeline {
   public boolean run() {
     System.out.println("Starting full grading pipeline...");
 
+    // Clean work directory from previous runs to prevent stale file interference
+    File workDirFile = new File(workDir);
+    if (workDirFile.exists()) {
+      System.out.println("Cleaning previous work directory: " + workDir);
+      try {
+        FileUtil.deleteDirectory(workDirFile);
+      } catch (IOException e) {
+        System.err.println("WARNING: Could not fully clean work directory: " + e.getMessage());
+      }
+    }
+
     // Check Prerequisites
     File subDir = new File(submissionsDir);
     if (!subDir.exists() || !subDir.isDirectory()) {
@@ -105,6 +116,15 @@ public class GradingPipeline {
       System.err.println("\n[!] CRITICAL ERROR: Docker engine is not running or accessible.");
       System.err.println("    The AutoGrader requires Docker to execute student code safely.");
       System.err.println("    Please start Docker Desktop and ensure 'docker info' works in your terminal.");
+      runner.shutdown();
+      return false;
+    }
+
+    // Pre-pull Docker image to avoid per-container timeout on first run
+    String dockerImage = config.getProperty("runner.image", "eclipse-temurin:17-jdk");
+    if (!runner.ensureImageAvailable(dockerImage)) {
+      System.err.println("ERROR: Failed to pull Docker image: " + dockerImage);
+      System.err.println("    Please run 'docker pull " + dockerImage + "' manually and try again.");
       runner.shutdown();
       return false;
     }
