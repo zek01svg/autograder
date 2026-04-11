@@ -2,6 +2,7 @@
   "name": "dashboard",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.33.0",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -46,6 +47,7 @@
     "oxfmt": "^0.44.0",
     "oxlint": "^1.59.0",
     "tailwindcss": "^4.2.2",
+    "turbo": "^2.9.6",
     "typescript": "^6.0.2"
   }
 }
