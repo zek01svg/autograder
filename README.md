@@ -22,13 +22,17 @@ A modern Java-based autograder with AI-assisted test generation. Supports isolat
 
 ## 🚀 Quick Start
 
-1. **Compile the engine:**
+1. **Model Setup (for AI Generation):**
+   Ensure Ollama is installed and running, then pull the required model:
+   ```bash
+   ollama pull qwen2.5-coder:3b
+   ```
+
+2. **Compile the engine:**
    ```bash
    scripts/compile.bat  # Windows
    ./scripts/compile.sh # macOS/Linux
    ```
-
-2. Add tester files, exam template, and student submissions to the `Tester-Files`, `RenameToYourUsername`, and `student-submission` folders respectively.
 
 3. **Start the Dashboard:**
    ```bash
@@ -37,7 +41,10 @@ A modern Java-based autograder with AI-assisted test generation. Supports isolat
    pnpm dev
    ```
 
-3. **Open:** [http://localhost:3000](http://localhost:3000)
+4. **Open:** [http://localhost:3000](http://localhost:3000)
+
+> [!TIP]
+> You can either place files manually in the `Tester-Files/`, `web-uploads/template/`, and `web-uploads/submissions/` directories, or simply upload them using the **Direct** or **Generate** modes in the dashboard UI.
 
 ---
 
