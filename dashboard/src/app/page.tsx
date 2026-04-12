@@ -710,16 +710,6 @@ export default function DashboardPage() {
                                     >
                                       <div className="flex items-center justify-end gap-2">
                                         {qScore !== undefined ? qScore.toFixed(1) : "—"}
-                                        {qError && (
-                                          <div className="relative group/qerr inline-block">
-                                            <span className="text-red-500 cursor-help text-xs animate-pulse">
-                                              ⚠️
-                                            </span>
-                                            <div className="absolute right-0 bottom-full mb-2 hidden group-hover/qerr:block z-50 w-64 bg-popover text-popover-foreground text-[10px] rounded-lg shadow-xl p-3 border border-border leading-relaxed font-mono whitespace-pre-wrap">
-                                              {qError}
-                                            </div>
-                                          </div>
-                                        )}
                                       </div>
                                     </td>
                                   );

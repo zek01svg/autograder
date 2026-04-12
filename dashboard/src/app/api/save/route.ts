@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import logger from "@/lib/pino";  
+import logger from "@/lib/pino";
+import { fixAiCode } from "@/lib/utils";
 
 export async function POST(request: Request) {
   try {
@@ -31,25 +32,40 @@ export async function POST(request: Request) {
       testerFilesDir,
     });
 
-    // Ensure the directory exists
-    if (!fs.existsSync(testerFilesDir)) {
+    // 1. Stale File Cleanup: Remove all existing *Tester.java files before saving new ones
+    if (fs.existsSync(testerFilesDir)) {
+      const existingFiles = fs.readdirSync(testerFilesDir);
+      for (const f of existingFiles) {
+        if (f.endsWith("Tester.java")) {
+          fs.unlinkSync(path.join(testerFilesDir, f));
+        }
+      }
+      logger.info("Stale Tester.java files cleaned up");
+    } else {
       logger.info(`Creating missing directory: ${testerFilesDir}`);
       fs.mkdirSync(testerFilesDir, { recursive: true });
     }
 
-    // Save each file
+    // 2. Process and Save each file
     for (const file of files) {
       if (!file.filename || !file.code) {
         logger.warn("Skipping invalid file object:", file);
         continue;
       }
-      const filePath = path.join(testerFilesDir, file.filename);
-      // Recursively create subdirectories if they don't exist
-      fs.mkdirSync(path.dirname(filePath), { recursive: true });
-      fs.writeFileSync(filePath, file.code, "utf8");
+
+      // a. Filename Flattening: Strip junk prefixes like RenameToYourUsername/Q1/ 
+      const flattenedName = path.basename(file.filename);
+      const filePath = path.join(testerFilesDir, flattenedName);
+
+      // b. Auto-Fix: Ensure imports exist, deduplicate vars, and normalize scores
+      const normalizedCode = fixAiCode(file.code || "");
+
+      fs.writeFileSync(filePath, normalizedCode, "utf8");
+      
       logger.info({
-        msg: "test files saved",
-        filename: file.filename,
+        msg: "test file processed and saved",
+        originalName: file.filename,
+        flattenedName,
         filePath,
       });
     }

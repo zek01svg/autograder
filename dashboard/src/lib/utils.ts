@@ -87,3 +87,36 @@ export async function batchPromiseAll<T>(
 
   return results;
 }
+
+/**
+ * Post-processes AI-generated Java code to fix common syntax errors and ensure compatibility.
+ */
+export function fixAiCode(code: string): string {
+  if (!code) return "";
+  let fixed = code;
+
+  // 1. Remove package declarations (Zero-Package rule)
+  fixed = fixed.replace(/package\s+[\w.]+;/g, "");
+
+  // 2. Auto-Inject Missing Imports
+  if (!fixed.includes("import java.util.*")) {
+    fixed = "import java.util.*;\nimport java.io.*;\n" + fixed;
+  }
+
+  // 3. Fix Variable Redeclarations (e.g. second 'String actual =' -> 'actual =')
+  const commonVars = ["actual", "inputs", "result", "expected", "val", "data", "list"];
+  for (const v of commonVars) {
+    // Matches: [Type] [varName] = ... -> replaces with just [varName] = ... on subsequent matches
+    const regex = new RegExp(`(\\b(?:String|int|double|boolean|List<[^>]*>|ArrayList<[^>]*>|var)\\s+)(${v}\\b)`, "g");
+    let matchCount = 0;
+    fixed = fixed.replace(regex, (match, type, name) => {
+      matchCount++;
+      return matchCount > 1 ? name : match;
+    });
+  }
+
+  // 4. Normalize score increments to strictly += 1 
+  fixed = fixed.replace(/score\s*\+=\s*(?!1\s*;)(\d+(?:\.\d+)?)/g, "score += 1");
+
+  return fixed.trim();
+}

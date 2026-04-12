@@ -1,5 +1,6 @@
 import { Ollama } from "ollama";
 import logger from "@/lib/pino";
+import { fixAiCode } from "./utils";
 
 const DEFAULT_MODEL_NAME = "qwen2.5-coder:3b";
 
@@ -33,27 +34,32 @@ export async function generateTestFiles({
   const systemPrompt = `You are an expert Java Test Grader.
 Your goal is to generate pure Java tester files that extend student classes and provide a final score.
 
-### 🚫 AGGRESSIVE RULE: NO JUNIT
-- DO NOT use JUnit, TestNG, or any other testing framework.
-- DO NOT use @Test, @Before, Assert.assertEquals, or any JUnit imports.
-- ALL tests must be written in pure Java using standard if/else logic and try/catch blocks.
-
 STUDENT TEMPLATE CONTEXT:
-\${templateStructure}
+${templateStructure}
 
 ### MANDATORY RULES:
-1. ONLY generate the Tester classes. DO NOT re-write the student base files.
+1. ONLY generate the Tester classes. DO NOT re-write base files.
 2. Filenames MUST end in 'Tester.java' (e.g. Q1aTester.java).
 3. Classes MUST extend the base question (e.g. public class Q1aTester extends Q1a).
-4. Logic: Use a 'public static int grade()' method to conduct tests.
-5. Final Output: The main() method MUST call grade() and print ONLY the final integer score.
-6. NO decorative lines (---). NO verbose logging.
-
-### EXAMPLE STRUCTURE (Q1aTester.java):
-{
-  "filename": "RenameToYourUsername/Q1/Q1aTester.java",
-  "code": "import java.util.*;\npublic class Q1aTester extends Q1a {\n    public static void main(String[] args) {\n        // ONLY print the numeric score on the last line\n        System.out.println(grade());\n    }\n    public static int grade() {\n        int score = 0;\n        try {\n            // Use standard Java logic - NO JUnit assertions\n            if (getIsogramWords(new ArrayList<>(Arrays.asList(\"cat\"))).size() == 1) score += 10;\n            if (getIsogramWords(new ArrayList<>(Arrays.asList(\"paper\"))).isEmpty()) score += 10;\n        } catch (Exception e) {\n            // Silent failure is okay for grading\n        } \n        return score;\n    }\n}"
-}
+4. USE THIS EXACT STRUCTURE:
+   import java.util.*;
+   import java.io.*;
+   public class Q1aTester extends Q1a {
+       private static double score = 0;
+       public static void main(String[] args) {
+           grade();
+           System.out.println(score);
+       }
+       public static void grade() {
+           try {
+               // Use 'score += 1;' for every passed test. NO JUNIT.
+           } catch (Exception e) {}
+       }
+   }
+5. CRITICAL JAVA RULES:
+   - ALWAYS include 'import java.util.*;' and 'import java.io.*;' at the top.
+   - NEVER redeclare a variable type inside the same method (e.g., if 'String actual' exists, use 'actual = ...' for the next test).
+   - ALL methods you call (like getIsogramWords) are STATIC as per the student templates.
 `;
 
   try {
@@ -96,13 +102,41 @@ STUDENT TEMPLATE CONTEXT:
       async start(controller) {
         const encoder = new TextEncoder();
         try {
+          let fullContent = "";
           for await (const chunk of stream) {
+            const content = chunk.message.content;
+            fullContent += content;
             const data = JSON.stringify({
               type: "content",
-              delta: chunk.message.content,
+              delta: content,
             });
             controller.enqueue(encoder.encode(`data: ${data}\n\n`));
           }
+
+          // Final Post-Processing Step
+          try {
+            // Find the JSON block if the model included markers
+            const jsonMatch = fullContent.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              const parsed = JSON.parse(jsonMatch[0]);
+              if (parsed.files && Array.isArray(parsed.files)) {
+                const fixedFiles = parsed.files.map((file: any) => {
+                  const filename = file.filename.split('/').pop() || file.filename;
+                  const code = fixAiCode(file.code || "");
+                  return { ...file, filename, code };
+                });
+                
+                const fixedData = JSON.stringify({
+                  type: "fixed_files",
+                  files: fixedFiles,
+                });
+                controller.enqueue(encoder.encode(`data: ${fixedData}\n\n`));
+              }
+            }
+          } catch (e) {
+            logger.warn({ msg: "Post-processing of AI output failed", error: e });
+          }
+
           controller.close();
         } catch (error) {
           console.error("[AI Stream] Error during streaming:", error);
